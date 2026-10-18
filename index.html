@@ -5,7 +5,7 @@
 	<meta name="viewport" content="width=device-width, initial-scale=1">
 	<meta name="theme-color" content="#f3f5ef">
 	<title>Transfer Van Calculator</title>
-	<link rel="stylesheet" href="style.css">
+	<link rel="stylesheet" href="/src/style.css">
 </head>
 <body>
 	<div class="shell">
@@ -45,29 +45,31 @@
 				<section class="upload-card" aria-labelledby="before-board-title">
 					<div>
 						<h2 id="before-board-title">Transfer board before</h2>
-						<p>Upload the transfer board before the trip.</p>
+						<p>Choose or drop an .xlsx file here.</p>
 					</div>
 					<div>
 						<label class="upload-button" for="before-board-file">
 							<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 16V4m-5 5 5-5 5 5M4 16v4h16v-4" /></svg>
 							Choose file
 						</label>
-						<input class="file-input" id="before-board-file" type="file" accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,image/*">
+						<input class="file-input" id="before-board-file" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet">
 						<span class="file-name" id="before-board-name" aria-live="polite"></span>
+						<span class="upload-status" id="before-board-status" aria-live="polite"></span>
 					</div>
 				</section>
 				<section class="upload-card" aria-labelledby="after-board-title">
 					<div>
 						<h2 id="after-board-title">Transfer board after</h2>
-						<p>Upload the transfer board after the trip.</p>
+						<p>Choose or drop an .xlsx file here.</p>
 					</div>
 					<div>
 						<label class="upload-button" for="after-board-file">
 							<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 16V4m-5 5 5-5 5 5M4 16v4h16v-4" /></svg>
 							Choose file
 						</label>
-						<input class="file-input" id="after-board-file" type="file" accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,image/*">
+						<input class="file-input" id="after-board-file" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet">
 						<span class="file-name" id="after-board-name" aria-live="polite"></span>
+						<span class="upload-status" id="after-board-status" aria-live="polite"></span>
 					</div>
 				</section>
 			</div>
@@ -76,31 +78,29 @@
 				<button class="placeholder" type="button" disabled>Route options</button>
 				<button class="placeholder" type="button" disabled>Calculate transfers</button>
 			</div>
+			<section class="data-output" aria-labelledby="data-output-title">
+				<header class="data-heading">
+					<div>
+						<p class="eyebrow">Import preview</p>
+						<h2 id="data-output-title">Transfer data</h2>
+					</div>
+					<p class="data-summary" id="data-summary" aria-live="polite">No data loaded</p>
+				</header>
+				<section class="data-section" aria-labelledby="missionaries-title">
+					<h3 id="missionaries-title">Missionaries</h3>
+					<div class="table-scroll" id="missionary-output">
+						<p class="empty-state">Upload a transfer board to see missionary records.</p>
+					</div>
+				</section>
+				<section class="data-section" aria-labelledby="zones-title">
+					<h3 id="zones-title">Zones</h3>
+					<div class="zones-output" id="zone-output">
+						<p class="empty-state">No zones loaded.</p>
+					</div>
+				</section>
+			</section>
 		</main>
 	</div>
-	<script>
-		const homeView = document.getElementById("home-view");
-		const tripView = document.getElementById("trip-view");
-
-		document.getElementById("new-trip").addEventListener("click", () => {
-			homeView.hidden = true;
-			tripView.hidden = false;
-			window.scrollTo(0, 0);
-		});
-
-		document.getElementById("back-to-home").addEventListener("click", () => {
-			tripView.hidden = true;
-			homeView.hidden = false;
-			window.scrollTo(0, 0);
-		});
-
-		[["before-board-file", "before-board-name"], ["after-board-file", "after-board-name"]].forEach(([inputId, nameId]) => {
-			const input = document.getElementById(inputId);
-			const name = document.getElementById(nameId);
-			input.addEventListener("change", () => {
-				name.textContent = input.files.length ? input.files[0].name : "";
-			});
-		});
-	</script>
+	<script type="module" src="/src/main.ts"></script>
 </body>
 </html>
