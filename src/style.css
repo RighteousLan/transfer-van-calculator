@@ -257,6 +257,13 @@ button svg, .upload-button svg { width: 17px; height: 17px; }
 	font-size: 17px;
 }
 
+.data-count {
+	margin-left: 5px;
+	color: var(--muted);
+	font-size: 13px;
+	font-weight: 500;
+}
+
 .table-scroll {
 	max-width: 100%;
 	overflow-x: auto;

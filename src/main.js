@@ -22,6 +22,8 @@
 	const missionaryOutput = requireElement("missionary-output");
 	const zoneOutput = requireElement("zone-output");
 	const dataSummary = requireElement("data-summary");
+	const missionaryCount = requireElement("missionary-count");
+	const zoneCount = requireElement("zone-count");
 
 	requireElement("new-trip").addEventListener("click", () => {
 		homeView.hidden = true;
@@ -37,6 +39,11 @@
 
 	function displayName(before, after, period) {
 		return period === "before" ? before : after;
+	}
+
+	function displayChangedName(before, after) {
+		if (before === after) return before || "—";
+		return `${before || "—"} → ${after || "—"}`;
 	}
 
 	function formatArea(area, period) {
@@ -130,21 +137,21 @@
 			const zoneSection = document.createElement("section");
 			zoneSection.className = "zone-entry";
 			const zoneHeading = document.createElement("h4");
-			zoneHeading.textContent = `Zone: ${zone.nameBefore || "—"} / ${zone.nameAfter || "—"}`;
+			zoneHeading.textContent = `Zone: ${displayChangedName(zone.nameBefore, zone.nameAfter)}`;
 			zoneSection.append(zoneHeading);
 
 			for (const district of zone.districts) {
 				const districtSection = document.createElement("section");
 				districtSection.className = "district-entry";
 				const districtHeading = document.createElement("h5");
-				districtHeading.textContent = `District: ${district.nameBefore || "—"} / ${district.nameAfter || "—"}`;
+				districtHeading.textContent = `District: ${displayChangedName(district.nameBefore, district.nameAfter)}`;
 				districtSection.append(districtHeading);
 
 				const areaList = document.createElement("ul");
 				areaList.className = "area-list";
 				for (const area of district.areas) {
 					const item = document.createElement("li");
-					item.textContent = `Area: ${area.nameBefore || "—"} / ${area.nameAfter || "—"}`;
+					item.textContent = `Area: ${displayChangedName(area.nameBefore, area.nameAfter)}`;
 					areaList.append(item);
 				}
 				if (district.areas.length === 0) {
@@ -168,6 +175,8 @@
 	function renderImportedData() {
 		renderMissionaries();
 		renderZones();
+		missionaryCount.textContent = String(missionaries.length);
+		zoneCount.textContent = String(zones.length);
 		dataSummary.textContent = `${missionaries.length} ${missionaries.length === 1 ? "missionary" : "missionaries"} · ${zones.length} ${zones.length === 1 ? "zone" : "zones"}`;
 	}
 
@@ -208,7 +217,17 @@
 		let type = missionaryType(readField(row, ["type", "missionary type", "elder sister", "gender"]));
 		const fullName = readField(row, ["full name", "missionary name", "missionary", "name"]);
 
-		if ((!firstName || !lastName) && fullName) {
+		const commaIndex = fullName.indexOf(",");
+		if (commaIndex !== -1) {
+			const lastNameParts = fullName.slice(0, commaIndex).trim().split(/\s+/).filter(Boolean);
+			const leadingType = lastNameParts.length ? missionaryType(lastNameParts[0]) : null;
+			if (!type && leadingType) {
+				type = leadingType;
+				lastNameParts.shift();
+			}
+			lastName = lastNameParts.join(" ");
+			firstName = fullName.slice(commaIndex + 1).trim();
+		} else if ((!firstName || !lastName) && fullName) {
 			const parts = fullName.split(/\s+/).filter(Boolean);
 			const leadingType = parts.length ? missionaryType(parts[0]) : null;
 			if (!type && leadingType) {
