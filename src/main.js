@@ -5,11 +5,14 @@
 		District,
 		Missionary,
 		MissionaryType,
+		Route,
 		Zone,
 	} = window.TransferVanModels;
 	const missionaries = [];
 	const zones = [];
-	window.transferVanData = { missionaries, zones };
+	const routes = [];
+	const apartments = [];
+	window.transferVanData = { missionaries, zones, routes, apartments };
 
 	function requireElement(id) {
 		const element = document.getElementById(id);
@@ -19,11 +22,33 @@
 
 	const homeView = requireElement("home-view");
 	const tripView = requireElement("trip-view");
+	const routesView = requireElement("routes-view");
 	const missionaryOutput = requireElement("missionary-output");
 	const zoneOutput = requireElement("zone-output");
 	const dataSummary = requireElement("data-summary");
 	const missionaryCount = requireElement("missionary-count");
 	const zoneCount = requireElement("zone-count");
+	const routesList = requireElement("routes-list");
+	const apartmentsList = requireElement("apartments-list");
+	const routesCount = requireElement("routes-count");
+	const apartmentsCount = requireElement("apartments-count");
+	const routesSidebar = requireElement("routes-sidebar");
+	const sidebarBackdrop = requireElement("sidebar-backdrop");
+	const sidebarToggle = requireElement("sidebar-toggle");
+	const mapViewport = requireElement("map-viewport");
+	const mapStage = requireElement("map-stage");
+	const overviewMap = requireElement("overview-map");
+	const zoomOutButton = requireElement("zoom-out");
+	const zoomInButton = requireElement("zoom-in");
+	const zoomFitButton = requireElement("zoom-fit");
+	const zoomLevel = requireElement("zoom-level");
+	let minimumMapScale = 0;
+	let mapScale = 0;
+	let activePanPointer = null;
+	let panStartX = 0;
+	let panStartY = 0;
+	let panStartScrollLeft = 0;
+	let panStartScrollTop = 0;
 
 	requireElement("new-trip").addEventListener("click", () => {
 		homeView.hidden = true;
@@ -36,6 +61,156 @@
 		homeView.hidden = false;
 		window.scrollTo(0, 0);
 	});
+
+	function setSidebarOpen(isOpen) {
+		routesSidebar.classList.toggle("is-open", isOpen);
+		routesView.classList.toggle("menu-open", isOpen);
+		sidebarToggle.setAttribute("aria-expanded", String(isOpen));
+		sidebarToggle.setAttribute("aria-label", isOpen ? "Close routes and apartments" : "Open routes and apartments");
+		sidebarToggle.title = isOpen ? "Close menu" : "Open menu";
+	}
+
+	function renderRouteLists() {
+		routesList.replaceChildren();
+		apartmentsList.replaceChildren();
+		routesCount.textContent = String(routes.length);
+		apartmentsCount.textContent = String(apartments.length);
+
+		if (routes.length === 0) {
+			const empty = document.createElement("li");
+			empty.className = "collection-empty";
+			empty.textContent = "No routes yet";
+			routesList.append(empty);
+		} else {
+			routes.forEach((route, index) => {
+				const item = document.createElement("li");
+				item.className = "collection-item";
+				item.textContent = `Route ${index + 1} · ${route.apartments.length} apartments`;
+				routesList.append(item);
+			});
+		}
+
+		if (apartments.length === 0) {
+			const empty = document.createElement("li");
+			empty.className = "collection-empty";
+			empty.textContent = "No apartments yet";
+			apartmentsList.append(empty);
+		} else {
+			apartments.forEach((apartment, index) => {
+				const item = document.createElement("li");
+				item.className = "collection-item";
+				item.textContent = apartment.name || apartment.address || `Apartment ${index + 1}`;
+				apartmentsList.append(item);
+			});
+		}
+	}
+
+	requireElement("define-default-routes").addEventListener("click", () => {
+		homeView.hidden = true;
+		tripView.hidden = true;
+		routesView.hidden = false;
+		setSidebarOpen(false);
+		window.requestAnimationFrame(() => fitOverviewMap(true));
+	});
+
+	requireElement("routes-back").addEventListener("click", () => {
+		routesView.hidden = true;
+		homeView.hidden = false;
+		setSidebarOpen(false);
+		window.scrollTo(0, 0);
+	});
+
+	requireElement("add-route").addEventListener("click", () => {
+		routes.push(new Route());
+		renderRouteLists();
+	});
+
+	requireElement("add-apartment").addEventListener("click", () => {
+		apartments.push(new Apartment());
+		renderRouteLists();
+	});
+
+	sidebarToggle.addEventListener("click", () => {
+		setSidebarOpen(!routesSidebar.classList.contains("is-open"));
+	});
+	sidebarBackdrop.addEventListener("click", () => setSidebarOpen(false));
+	document.addEventListener("keydown", (event) => {
+		if (event.key === "Escape") setSidebarOpen(false);
+	});
+
+	function updateMapSize() {
+		if (!overviewMap.naturalWidth || !mapScale) return;
+		const width = overviewMap.naturalWidth * mapScale;
+		const height = overviewMap.naturalHeight * mapScale;
+		mapStage.style.setProperty("--map-width", `${width}px`);
+		mapStage.style.setProperty("--map-height", `${height}px`);
+		zoomLevel.textContent = `${Math.round(mapScale / minimumMapScale * 100)}%`;
+		zoomOutButton.disabled = mapScale <= minimumMapScale + 0.0001;
+		zoomInButton.disabled = mapScale >= minimumMapScale * 6 - 0.0001;
+	}
+
+	function fitOverviewMap(resetScale = false) {
+		if (!overviewMap.naturalWidth || !mapViewport.clientWidth || !mapViewport.clientHeight) return;
+		minimumMapScale = Math.min(
+			mapViewport.clientWidth / overviewMap.naturalWidth,
+			mapViewport.clientHeight / overviewMap.naturalHeight,
+		);
+		if (resetScale || !mapScale || mapScale < minimumMapScale) mapScale = minimumMapScale;
+		updateMapSize();
+		if (resetScale) mapViewport.scrollTo(0, 0);
+	}
+
+	function changeMapScale(nextScale, focusX, focusY) {
+		if (!minimumMapScale || !mapScale) return;
+		const previousScale = mapScale;
+		mapScale = Math.max(minimumMapScale, Math.min(minimumMapScale * 6, nextScale));
+		updateMapSize();
+		const ratio = mapScale / previousScale;
+		window.requestAnimationFrame(() => {
+			mapViewport.scrollLeft = Math.max(0, (mapViewport.scrollLeft + focusX) * ratio - focusX);
+			mapViewport.scrollTop = Math.max(0, (mapViewport.scrollTop + focusY) * ratio - focusY);
+		});
+	}
+
+	zoomOutButton.addEventListener("click", () => changeMapScale(mapScale / 1.25, mapViewport.clientWidth / 2, mapViewport.clientHeight / 2));
+	zoomInButton.addEventListener("click", () => changeMapScale(mapScale * 1.25, mapViewport.clientWidth / 2, mapViewport.clientHeight / 2));
+	zoomFitButton.addEventListener("click", () => fitOverviewMap(true));
+	mapViewport.addEventListener("pointerdown", (event) => {
+		if (event.button !== 0 || event.pointerType !== "mouse") return;
+		activePanPointer = event.pointerId;
+		panStartX = event.clientX;
+		panStartY = event.clientY;
+		panStartScrollLeft = mapViewport.scrollLeft;
+		panStartScrollTop = mapViewport.scrollTop;
+		mapViewport.classList.add("is-dragging");
+		mapViewport.setPointerCapture(event.pointerId);
+		event.preventDefault();
+	});
+	mapViewport.addEventListener("pointermove", (event) => {
+		if (event.pointerId !== activePanPointer) return;
+		mapViewport.scrollLeft = panStartScrollLeft - (event.clientX - panStartX);
+		mapViewport.scrollTop = panStartScrollTop - (event.clientY - panStartY);
+	});
+	const stopMapPan = (event) => {
+		if (event.pointerId !== activePanPointer) return;
+		activePanPointer = null;
+		mapViewport.classList.remove("is-dragging");
+	};
+	mapViewport.addEventListener("pointerup", stopMapPan);
+	mapViewport.addEventListener("pointercancel", stopMapPan);
+	mapViewport.addEventListener("lostpointercapture", stopMapPan);
+	mapViewport.addEventListener("wheel", (event) => {
+		if (!event.ctrlKey && !event.metaKey) return;
+		event.preventDefault();
+		const bounds = mapViewport.getBoundingClientRect();
+		const factor = event.deltaY < 0 ? 1.15 : 1 / 1.15;
+		changeMapScale(mapScale * factor, event.clientX - bounds.left, event.clientY - bounds.top);
+	}, { passive: false });
+	overviewMap.addEventListener("load", () => fitOverviewMap(routesView.hidden === false));
+	window.addEventListener("resize", () => {
+		if (!routesView.hidden) fitOverviewMap();
+	});
+	renderRouteLists();
 
 	function displayName(before, after, period) {
 		return period === "before" ? before : after;

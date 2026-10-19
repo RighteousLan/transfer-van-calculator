@@ -24,7 +24,7 @@
 			<h1>Make every transfer count.</h1>
 			<p class="intro">Plan your van transfers and bring the trip details together in one place.</p>
 			<div class="actions">
-				<button class="secondary" type="button" disabled>Define Default Routes</button>
+				<button class="secondary" id="define-default-routes" type="button">Define Default Routes</button>
 				<button class="primary" id="new-trip" type="button">
 					New Trip
 					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6" /></svg>
@@ -101,6 +101,69 @@
 			</section>
 		</main>
 	</div>
+	<main id="routes-view" class="routes-view" aria-label="Define default routes" hidden>
+		<aside class="routes-sidebar" id="routes-sidebar" aria-label="Routes and apartments">
+			<header class="sidebar-header">
+				<button class="back-button" id="routes-back" type="button">
+					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 12H5m6 6-6-6 6-6" /></svg>
+					Back
+				</button>
+				<h1>Default routes</h1>
+			</header>
+			<section class="collection-section" aria-labelledby="routes-title">
+				<div class="collection-heading">
+					<h2 id="routes-title">Routes</h2>
+					<span class="collection-count" id="routes-count">0</span>
+				</div>
+				<ul class="collection-list" id="routes-list">
+					<li class="collection-empty">No routes yet</li>
+				</ul>
+				<button class="add-item-button" id="add-route" type="button">
+					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
+					Add route
+				</button>
+			</section>
+			<section class="collection-section" aria-labelledby="apartments-title">
+				<div class="collection-heading">
+					<h2 id="apartments-title">Apartments</h2>
+					<span class="collection-count" id="apartments-count">0</span>
+				</div>
+				<ul class="collection-list" id="apartments-list">
+					<li class="collection-empty">No apartments yet</li>
+				</ul>
+				<button class="add-item-button" id="add-apartment" type="button">
+					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
+					Add apartment
+				</button>
+			</section>
+		</aside>
+		<button class="sidebar-backdrop" id="sidebar-backdrop" type="button" aria-label="Close menu" tabindex="-1"></button>
+		<section class="map-panel" aria-label="Overview map">
+			<header class="map-toolbar">
+				<button class="icon-button sidebar-toggle" id="sidebar-toggle" type="button" aria-label="Open routes and apartments" aria-expanded="false" title="Open menu">
+					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16" /></svg>
+				</button>
+				<p class="map-title">Mission overview</p>
+				<div class="zoom-controls" aria-label="Map zoom controls">
+					<button class="icon-button" id="zoom-out" type="button" aria-label="Zoom out" title="Zoom out">
+						<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M5 12h14" /></svg>
+					</button>
+					<span id="zoom-level" class="zoom-level">100%</span>
+					<button class="icon-button" id="zoom-in" type="button" aria-label="Zoom in" title="Zoom in">
+						<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
+					</button>
+					<button class="icon-button" id="zoom-fit" type="button" aria-label="Fit map to display" title="Fit map to display">
+						<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 3H5a2 2 0 0 0-2 2v3m13-5h3a2 2 0 0 1 2 2v3M3 16v3a2 2 0 0 0 2 2h3m13-5v3a2 2 0 0 1-2 2h-3" /></svg>
+					</button>
+				</div>
+			</header>
+			<div class="map-viewport" id="map-viewport" tabindex="0" aria-label="Scrollable, zoomable overview map">
+				<div class="map-stage" id="map-stage">
+					<img id="overview-map" src="./overview-2246341-1.png" alt="Overview map of the Philippines Dumaguete Mission" draggable="false">
+				</div>
+			</div>
+		</section>
+	</main>
 	<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 	<script src="./src/models.js"></script>
 	<script src="./src/main.js"></script>

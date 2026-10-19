@@ -1,0 +1,1 @@
+Let's add the functionality to add an appartment. When I click the add appartment button, It should open a pop-up asking for a name, and a pin. When you click the add pin button, it should open up a 
