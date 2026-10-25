@@ -23,6 +23,25 @@
 	const homeView = requireElement("home-view");
 	const tripView = requireElement("trip-view");
 	const routesView = requireElement("routes-view");
+	const routeListView = requireElement("route-list-view");
+	const routeEditorView = requireElement("route-editor-view");
+	const routeEditorMode = requireElement("route-editor-mode");
+	const routeEditorHeading = requireElement("route-editor-heading");
+	const routeEditorBack = requireElement("route-editor-back");
+	const routeNameInput = requireElement("route-name-input");
+	const routeDraftList = requireElement("route-draft-list");
+	const routeDraftCount = requireElement("route-draft-count");
+	const availableApartmentList = requireElement("available-apartment-list");
+	const availableApartmentCount = requireElement("available-apartment-count");
+	const apartmentSearch = requireElement("apartment-search");
+	const saveRouteButton = requireElement("save-route");
+	const saveDefaultsButton = requireElement("save-defaults");
+	const defaultsSaveStatus = requireElement("defaults-save-status");
+	const defaultsConfirmDialog = requireElement("defaults-confirm-dialog");
+	const defaultsConfirmTitle = requireElement("defaults-confirm-title");
+	const defaultsConfirmMessage = requireElement("defaults-confirm-message");
+	const defaultsConfirmCancel = requireElement("defaults-confirm-cancel");
+	const defaultsConfirmAccept = requireElement("defaults-confirm-accept");
 	const missionaryOutput = requireElement("missionary-output");
 	const zoneOutput = requireElement("zone-output");
 	const dataSummary = requireElement("data-summary");
@@ -38,6 +57,9 @@
 	const mapViewport = requireElement("map-viewport");
 	const mapStage = requireElement("map-stage");
 	const overviewMap = requireElement("overview-map");
+	const mapTitle = requireElement("map-title");
+	const pinPickBanner = requireElement("pin-pick-banner");
+	const cancelPinSelection = requireElement("cancel-pin-selection");
 	const zoomOutButton = requireElement("zoom-out");
 	const zoomInButton = requireElement("zoom-in");
 	const zoomFitButton = requireElement("zoom-fit");
@@ -45,9 +67,11 @@
 	const singleApartmentDialog = requireElement("single-apartment-dialog");
 	const singleApartmentForm = requireElement("single-apartment-form");
 	const singleApartmentName = requireElement("single-apartment-name");
+	const singleApartmentAddPin = requireElement("single-apartment-add-pin");
 	const editApartmentDialog = requireElement("edit-apartment-dialog");
 	const editApartmentForm = requireElement("edit-apartment-form");
 	const editApartmentName = requireElement("edit-apartment-name");
+	const editApartmentAddPin = requireElement("edit-apartment-add-pin");
 	const editApartmentAddress = requireElement("edit-apartment-address");
 	const editApartmentPhones = requireElement("edit-apartment-phones");
 	const editApartmentTeachingAreas = requireElement("edit-apartment-teaching-areas");
@@ -68,13 +92,22 @@
 	let minimumMapScale = 0;
 	let mapScale = 0;
 	let pendingBatchApartments = [];
+	let editingRouteDraft = null;
+	let editingRouteIndex = null;
+	let draggedRouteApartment = null;
+	let hasUnsavedDefaultChanges = false;
+	let defaultsConfirmationAction = null;
+	let singleApartmentDraft = null;
 	let editingApartment = null;
+	let editApartmentVisualPin = null;
+	let pinSelectionSession = null;
 	let apartmentTeachingAreaDistrict = null;
 	let activePanPointer = null;
 	let panStartX = 0;
 	let panStartY = 0;
 	let panStartScrollLeft = 0;
 	let panStartScrollTop = 0;
+	let panMoved = false;
 
 	requireElement("new-trip").addEventListener("click", () => {
 		homeView.hidden = true;
@@ -96,6 +129,139 @@
 		sidebarToggle.title = isOpen ? "Close menu" : "Open menu";
 	}
 
+	const DEFAULTS_STORAGE_KEY = "transfer-van-calculator.defaults.v1";
+
+	function setDefaultChangesDirty(isDirty, status = "") {
+		hasUnsavedDefaultChanges = isDirty;
+		saveDefaultsButton.disabled = !isDirty;
+		defaultsSaveStatus.textContent = status || (isDirty ? "Unsaved changes" : "Saved defaults");
+		defaultsSaveStatus.classList.toggle("has-unsaved-changes", isDirty);
+		defaultsSaveStatus.classList.toggle("error", Boolean(status) && !isDirty);
+	}
+
+	function serializeArea(area) {
+		return {
+			nameBefore: area.nameBefore,
+			nameAfter: area.nameAfter,
+			district: {
+				nameBefore: area.district.nameBefore,
+				nameAfter: area.district.nameAfter,
+				zone: {
+					nameBefore: area.district.zone.nameBefore,
+					nameAfter: area.district.zone.nameAfter,
+				},
+			},
+		};
+	}
+
+	function restoreArea(data) {
+		const zone = new Zone();
+		zone.nameBefore = data?.district?.zone?.nameBefore ?? "";
+		zone.nameAfter = data?.district?.zone?.nameAfter ?? "";
+		const district = new District(zone);
+		district.nameBefore = data?.district?.nameBefore ?? "";
+		district.nameAfter = data?.district?.nameAfter ?? "";
+		const area = new Area(district);
+		area.nameBefore = data?.nameBefore ?? "";
+		area.nameAfter = data?.nameAfter ?? "";
+		return area;
+	}
+
+	function serializeApartment(apartment) {
+		return {
+			name: apartment.name,
+			address: apartment.address,
+			phoneNumbers: [...apartment.phoneNumbers],
+			visualPin: apartment.visualPin ? { ...apartment.visualPin } : null,
+			teachingAreas: apartment.teachingAreas.map(serializeArea),
+			pickupAreas: apartment.pickupAreas.map(serializeArea),
+			dropoffAreas: apartment.dropoffAreas.map(serializeArea),
+		};
+	}
+
+	function restoreApartment(data) {
+		const apartment = new Apartment();
+		apartment.name = String(data?.name ?? "");
+		apartment.address = String(data?.address ?? "");
+		apartment.phoneNumbers = Array.isArray(data?.phoneNumbers) ? data.phoneNumbers.map(String) : [];
+		const pin = data?.visualPin;
+		apartment.visualPin = Number.isFinite(pin?.x) && Number.isFinite(pin?.y) ? { x: pin.x, y: pin.y } : null;
+		apartment.teachingAreas = Array.isArray(data?.teachingAreas) ? data.teachingAreas.map(restoreArea) : [];
+		apartment.pickupAreas = Array.isArray(data?.pickupAreas) ? data.pickupAreas.map(restoreArea) : [];
+		apartment.dropoffAreas = Array.isArray(data?.dropoffAreas) ? data.dropoffAreas.map(restoreArea) : [];
+		return apartment;
+	}
+
+	function serializeDefaultData() {
+		return {
+			version: 1,
+			apartments: apartments.map(serializeApartment),
+			routes: routes.map((route) => ({
+				name: route.name,
+				apartmentIndexes: route.apartmentList.map((apartment) => apartments.indexOf(apartment)),
+				travelTimes: route.travelTimeTable.map((row) => [...row]),
+			})),
+		};
+	}
+
+	function loadSavedDefaults() {
+		try {
+			const saved = localStorage.getItem(DEFAULTS_STORAGE_KEY);
+			if (!saved) {
+				apartments.splice(0, apartments.length);
+				routes.splice(0, routes.length);
+				setDefaultChangesDirty(false);
+				return true;
+			}
+			const data = JSON.parse(saved);
+			if (data?.version !== 1) throw new Error("Saved defaults use an unsupported version.");
+			const restoredApartments = Array.isArray(data.apartments) ? data.apartments.map(restoreApartment) : [];
+			const restoredRoutes = Array.isArray(data.routes) ? data.routes.map((routeData) => {
+				const route = new Route();
+				route.name = String(routeData?.name ?? "");
+				for (const apartmentIndex of routeData?.apartmentIndexes ?? []) {
+					const apartment = restoredApartments[apartmentIndex];
+					if (apartment) route.addApartment(apartment);
+				}
+				const storedTravelTimes = routeData?.travelTimes ?? [];
+				route.travelTimeTable = route.apartmentList.map((_, rowIndex) =>
+					route.apartmentList.map((_, columnIndex) => {
+						const time = storedTravelTimes[rowIndex]?.[columnIndex];
+						return typeof time === "number" && Number.isFinite(time) ? time : null;
+					}));
+				return route;
+			}) : [];
+			apartments.splice(0, apartments.length, ...restoredApartments);
+			routes.splice(0, routes.length, ...restoredRoutes);
+			setDefaultChangesDirty(false);
+			return true;
+		} catch (error) {
+			apartments.splice(0, apartments.length);
+			routes.splice(0, routes.length);
+			setDefaultChangesDirty(false, "Could not load saved defaults");
+			return false;
+		}
+	}
+
+	function persistDefaultData() {
+		try {
+			localStorage.setItem(DEFAULTS_STORAGE_KEY, JSON.stringify(serializeDefaultData()));
+			setDefaultChangesDirty(false, "Defaults saved");
+			return true;
+		} catch (error) {
+			setDefaultChangesDirty(true, "Could not save defaults");
+			return false;
+		}
+	}
+
+	function confirmDefaultsAction(title, message, confirmLabel, action) {
+		defaultsConfirmationAction = action;
+		defaultsConfirmTitle.textContent = title;
+		defaultsConfirmMessage.textContent = message;
+		defaultsConfirmAccept.textContent = confirmLabel;
+		defaultsConfirmDialog.showModal();
+	}
+
 	function renderRouteLists() {
 		routesList.replaceChildren();
 		apartmentsList.replaceChildren();
@@ -110,8 +276,21 @@
 		} else {
 			routes.forEach((route, index) => {
 				const item = document.createElement("li");
-				item.className = "collection-item";
-				item.textContent = `Route ${index + 1} · ${route.apartments.length} apartments`;
+				item.className = "saved-route-row";
+				const label = document.createElement("span");
+				label.className = "saved-route-name";
+				label.textContent = route.name || `Route ${index + 1}`;
+				const detail = document.createElement("span");
+				detail.className = "saved-route-detail";
+				detail.textContent = `${route.apartments.length} ${route.apartments.length === 1 ? "apartment" : "apartments"}`;
+				const editButton = document.createElement("button");
+				editButton.className = "apartment-row-action";
+				editButton.type = "button";
+				editButton.setAttribute("aria-label", `Edit ${route.name || `Route ${index + 1}`}`);
+				editButton.title = "Edit route";
+				editButton.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 5 4 4M4 20l4-.8L19 8a2.1 2.1 0 0 0-3-3L5 16l-1 4Z" /></svg>';
+				editButton.addEventListener("click", () => openRouteEditor(index));
+				item.append(label, detail, editButton);
 				routesList.append(item);
 			});
 		}
@@ -130,6 +309,16 @@
 				label.textContent = apartment.name || apartment.address || `Apartment ${index + 1}`;
 				const actions = document.createElement("div");
 				actions.className = "apartment-list-actions";
+				if (apartment.visualPin) {
+					const focusButton = document.createElement("button");
+					focusButton.className = "apartment-row-action locate-apartment";
+					focusButton.type = "button";
+					focusButton.setAttribute("aria-label", "Focus map on apartment");
+					focusButton.title = "Show apartment on map";
+					focusButton.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 10c0 5-8 12-8 12S4 15 4 10a8 8 0 1 1 16 0Z" /><circle cx="12" cy="10" r="2.5" /></svg>';
+					focusButton.addEventListener("click", () => focusApartmentPin(apartment));
+					actions.append(focusButton);
+				}
 				const editButton = document.createElement("button");
 				editButton.className = "apartment-row-action";
 				editButton.type = "button";
@@ -149,6 +338,203 @@
 				apartmentsList.append(item);
 			});
 		}
+		renderMapPins();
+	}
+
+	function cloneRoute(route) {
+		const draft = new Route();
+		draft.name = route.name || "";
+		for (const apartment of route.apartments) draft.addApartment(apartment);
+		draft.travelTimeTable = route.travelTimeTable.map((row) => [...row]);
+		return draft;
+	}
+
+	function updateRouteSaveState() {
+		saveRouteButton.disabled = !routeNameInput.value.trim();
+	}
+
+	function openRouteEditor(routeIndex = null) {
+		editingRouteIndex = routeIndex;
+		editingRouteDraft = routeIndex === null ? new Route() : cloneRoute(routes[routeIndex]);
+		routeNameInput.value = editingRouteDraft.name;
+		apartmentSearch.value = "";
+		routeEditorMode.textContent = routeIndex === null ? "New route" : "Edit route";
+		routeEditorHeading.textContent = routeIndex === null ? "Build a route" : editingRouteDraft.name;
+		routeListView.hidden = true;
+		routeEditorView.hidden = false;
+		routesView.classList.add("editing-route");
+		setSidebarOpen(window.matchMedia("(max-width: 900px)").matches);
+		renderRouteEditor();
+		updateRouteSaveState();
+		window.requestAnimationFrame(() => fitOverviewMap());
+	}
+
+	function closeRouteEditor() {
+		editingRouteDraft = null;
+		editingRouteIndex = null;
+		draggedRouteApartment = null;
+		routeEditorView.hidden = true;
+		routeListView.hidden = false;
+		routesView.classList.remove("editing-route");
+		setSidebarOpen(false);
+		renderRouteLists();
+		window.requestAnimationFrame(() => fitOverviewMap());
+	}
+
+	function createApartmentPinButton(apartment) {
+		if (!apartment.visualPin) return null;
+		const button = document.createElement("button");
+		button.className = "apartment-row-action locate-apartment";
+		button.type = "button";
+		button.setAttribute("aria-label", `Show ${apartment.name || "apartment"} on map`);
+		button.title = "Show apartment on map";
+		button.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 10c0 5-8 12-8 12S4 15 4 10a8 8 0 1 1 16 0Z" /><circle cx="12" cy="10" r="2.5" /></svg>';
+		button.addEventListener("click", () => focusApartmentPin(apartment));
+		return button;
+	}
+
+	function createMoveButton(label, direction, onClick) {
+		const button = document.createElement("button");
+		button.className = "apartment-row-action route-move-button";
+		button.type = "button";
+		button.setAttribute("aria-label", `${direction === "into-route" ? "Add" : "Remove"} ${label} ${direction === "into-route" ? "to" : "from"} route`);
+		button.title = direction === "into-route" ? "Add to route" : "Remove from route";
+		const arrow = direction === "into-route"
+			? "<path d='M5 12h14m-6-6 6 6-6 6' />"
+			: "<path d='M19 12H5m6 6-6-6 6-6' />";
+		button.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${arrow}</svg>`;
+		button.addEventListener("click", onClick);
+		return button;
+	}
+
+	function reorderRouteApartments(fromIndex, toIndex) {
+		if (!editingRouteDraft || fromIndex === toIndex) return;
+		const originalOrder = [...editingRouteDraft.apartmentList];
+		const [movedApartment] = editingRouteDraft.apartmentList.splice(fromIndex, 1);
+		editingRouteDraft.apartmentList.splice(toIndex, 0, movedApartment);
+		const permutation = editingRouteDraft.apartmentList.map((apartment) => originalOrder.indexOf(apartment));
+		const oldTravelTimes = editingRouteDraft.travelTimeTable.map((row) => [...row]);
+		const reorderedTravelTimes = permutation.map((rowIndex) =>
+			permutation.map((columnIndex) => oldTravelTimes[rowIndex]?.[columnIndex] ?? null));
+		editingRouteDraft.travelTimeTable.splice(0, editingRouteDraft.travelTimeTable.length, ...reorderedTravelTimes);
+		renderRouteEditor();
+	}
+
+	function removeApartmentFromDraft(apartment) {
+		if (!editingRouteDraft) return;
+		const index = editingRouteDraft.apartmentList.indexOf(apartment);
+		if (index === -1) return;
+		editingRouteDraft.apartmentList.splice(index, 1);
+		editingRouteDraft.travelTimeTable.splice(index, 1);
+		for (const row of editingRouteDraft.travelTimeTable) row.splice(index, 1);
+		renderRouteEditor();
+	}
+
+	function addApartmentToDraft(apartment) {
+		if (!editingRouteDraft || editingRouteDraft.apartmentList.includes(apartment)) return;
+		editingRouteDraft.addApartment(apartment);
+		renderRouteEditor();
+	}
+
+	function renderRouteEditor() {
+		if (!editingRouteDraft) return;
+		routeDraftList.replaceChildren();
+		routeDraftCount.textContent = String(editingRouteDraft.apartments.length);
+		if (editingRouteDraft.apartments.length === 0) {
+			const empty = document.createElement("li");
+			empty.className = "collection-empty route-empty";
+			empty.textContent = "Add apartments from the list.";
+			routeDraftList.append(empty);
+		} else {
+			editingRouteDraft.apartments.forEach((apartment, index) => {
+				const row = document.createElement("li");
+				row.className = "route-apartment-row";
+				row.addEventListener("dragover", (event) => {
+					if (draggedRouteApartment === null) return;
+					event.preventDefault();
+					row.classList.add("drag-target");
+				});
+				row.addEventListener("dragleave", () => row.classList.remove("drag-target"));
+				row.addEventListener("drop", (event) => {
+					event.preventDefault();
+					row.classList.remove("drag-target");
+					if (draggedRouteApartment !== null) reorderRouteApartments(draggedRouteApartment, index);
+					draggedRouteApartment = null;
+				});
+
+				const handle = document.createElement("button");
+				handle.className = "route-reorder-handle";
+				handle.type = "button";
+				handle.draggable = true;
+				handle.setAttribute("aria-label", `Reorder ${apartment.name || `apartment ${index + 1}`}`);
+				handle.title = "Drag to reorder";
+				handle.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M7 6h10M7 12h10M7 18h10" /></svg>';
+				handle.addEventListener("dragstart", (event) => {
+					draggedRouteApartment = index;
+					row.classList.add("is-dragging");
+					if (event.dataTransfer) {
+						event.dataTransfer.effectAllowed = "move";
+						event.dataTransfer.setData("text/plain", String(index));
+					}
+				});
+				handle.addEventListener("dragend", () => {
+					draggedRouteApartment = null;
+					renderRouteEditor();
+				});
+
+				const name = document.createElement("span");
+				name.className = "route-apartment-name";
+				name.textContent = apartment.name || apartment.address || `Apartment ${index + 1}`;
+				const actions = document.createElement("div");
+				actions.className = "route-apartment-actions";
+				const pinButton = createApartmentPinButton(apartment);
+				if (pinButton) actions.append(pinButton);
+				actions.append(createMoveButton(apartment.name || "apartment", "from-route", () => removeApartmentFromDraft(apartment)));
+				row.append(handle, name, actions);
+				routeDraftList.append(row);
+			});
+		}
+
+		const query = normalize(apartmentSearch.value.trim());
+		const available = apartments.filter((apartment) =>
+			!editingRouteDraft.apartments.includes(apartment)
+			&& (!query || normalize(apartment.name).includes(query)
+				|| apartment.teachingAreas.some((area) =>
+					normalize(area.nameBefore).includes(query) || normalize(area.nameAfter).includes(query))));
+		availableApartmentCount.textContent = String(available.length);
+		availableApartmentList.replaceChildren();
+		if (available.length === 0) {
+			const empty = document.createElement("li");
+			empty.className = "collection-empty";
+			empty.textContent = query ? "No matching apartments" : "No available apartments";
+			availableApartmentList.append(empty);
+			return;
+		}
+
+		for (const [index, apartment] of available.entries()) {
+			const row = document.createElement("li");
+			row.className = "available-apartment-row";
+			const name = document.createElement("span");
+			name.className = "route-apartment-name";
+			name.textContent = apartment.name || apartment.address || `Apartment ${index + 1}`;
+			const actions = document.createElement("div");
+			actions.className = "route-apartment-actions";
+			const pinButton = createApartmentPinButton(apartment);
+			if (pinButton) actions.append(pinButton);
+			actions.append(createMoveButton(apartment.name || "apartment", "into-route", () => addApartmentToDraft(apartment)));
+			row.append(name, actions);
+			availableApartmentList.append(row);
+		}
+	}
+
+	function saveRouteDraft() {
+		const name = routeNameInput.value.trim();
+		if (!editingRouteDraft || !name) return;
+		editingRouteDraft.name = name;
+		if (editingRouteIndex === null) routes.push(editingRouteDraft);
+		else routes[editingRouteIndex] = editingRouteDraft;
+		setDefaultChangesDirty(true);
+		closeRouteEditor();
 	}
 
 	function isDuplicateApartmentName(name, exceptApartment = null) {
@@ -170,6 +556,7 @@
 		editApartmentTeachingAreas.value = apartmentAreaText(apartment.teachingAreas);
 		editApartmentPickupAreas.value = apartmentAreaText(apartment.pickupAreas);
 		editApartmentDropoffAreas.value = apartmentAreaText(apartment.dropoffAreas);
+		editApartmentVisualPin = apartment.visualPin;
 		updateNameInputState(editApartmentName, isDuplicateApartmentName(apartment.name, apartment));
 		editApartmentDialog.showModal();
 		editApartmentName.focus();
@@ -187,9 +574,11 @@
 			for (const row of route.travelTimeTable) row.splice(apartmentIndex, 1);
 		}
 		renderRouteLists();
+		setDefaultChangesDirty(true);
 	}
 
 	function resetBatchApartmentDialog() {
+		if (pinSelectionSession?.dialog === batchApartmentDialog) return;
 		pendingBatchApartments = [];
 		batchApartmentForm.reset();
 		batchApartmentFilename.textContent = "";
@@ -205,6 +594,7 @@
 		batchApartmentDuplicateCount.textContent = "";
 		batchApartmentDropzone.hidden = false;
 		batchApartmentDropzone.classList.remove("drag-over");
+		renderMapPins();
 	}
 
 	function updateNameInputState(input, isDuplicate = false) {
@@ -355,6 +745,13 @@
 			pinButton.textContent = "Add pin";
 			entry.append(nameLabel, addressText, phoneText, areaText, pinButton);
 			batchApartmentReviewList.append(entry);
+			candidate.visualPin = existing?.visualPin ?? null;
+			pinButton.addEventListener("click", () => beginMapPinSelection(batchApartmentDialog, (visualPin) => {
+				candidate.visualPin = visualPin;
+				const pendingCandidate = pendingBatchApartments.find((item) => item.key === candidate.key);
+				if (pendingCandidate) pendingCandidate.visualPin = visualPin;
+				renderMapPins();
+			}));
 			return { ...candidate, nameInput };
 		});
 
@@ -365,7 +762,6 @@
 	}
 
 	async function loadBatchApartmentFile(file) {
-		pendingBatchApartments = [];
 		batchApartmentFilename.textContent = file.name;
 		batchApartmentStatus.classList.remove("error");
 		batchApartmentReview.hidden = true;
@@ -425,39 +821,101 @@
 	});
 
 	requireElement("routes-back").addEventListener("click", () => {
-		routesView.hidden = true;
-		homeView.hidden = false;
-		setSidebarOpen(false);
-		window.scrollTo(0, 0);
+		const returnToLanding = () => {
+			if (hasUnsavedDefaultChanges) {
+				loadSavedDefaults();
+				renderRouteLists();
+			}
+			routesView.hidden = true;
+			homeView.hidden = false;
+			setSidebarOpen(false);
+			window.scrollTo(0, 0);
+		};
+		if (!hasUnsavedDefaultChanges) {
+			returnToLanding();
+			return;
+		}
+		confirmDefaultsAction(
+			"Leave without saving?",
+			"Your unsaved route and apartment changes will be discarded.",
+			"Discard changes",
+			returnToLanding,
+		);
 	});
 
-	requireElement("add-route").addEventListener("click", () => {
-		routes.push(new Route());
-		renderRouteLists();
+	saveDefaultsButton.addEventListener("click", () => {
+		if (!hasUnsavedDefaultChanges) return;
+		confirmDefaultsAction(
+			"Save these defaults?",
+			"This permanently replaces the saved default routes and apartments. This action cannot be reverted.",
+			"Save permanently",
+			persistDefaultData,
+		);
 	});
+	defaultsConfirmCancel.addEventListener("click", () => {
+		defaultsConfirmationAction = null;
+		defaultsConfirmDialog.close();
+	});
+	defaultsConfirmAccept.addEventListener("click", () => {
+		const action = defaultsConfirmationAction;
+		defaultsConfirmationAction = null;
+		defaultsConfirmDialog.close();
+		action?.();
+	});
+	defaultsConfirmDialog.addEventListener("cancel", (event) => event.preventDefault());
+
+	requireElement("add-route").addEventListener("click", () => {
+		openRouteEditor();
+	});
+	routeEditorBack.addEventListener("click", closeRouteEditor);
+	routeNameInput.addEventListener("input", updateRouteSaveState);
+	apartmentSearch.addEventListener("input", renderRouteEditor);
+	saveRouteButton.addEventListener("click", saveRouteDraft);
 
 	requireElement("add-apartment").addEventListener("click", () => {
 		singleApartmentForm.reset();
+		singleApartmentDraft = new Apartment();
 		updateNameInputState(singleApartmentName);
 		singleApartmentDialog.showModal();
 		singleApartmentName.focus();
+	});
+	singleApartmentAddPin.addEventListener("click", () => {
+		if (!singleApartmentDraft) singleApartmentDraft = new Apartment();
+		beginMapPinSelection(singleApartmentDialog, (visualPin) => {
+			singleApartmentDraft.visualPin = visualPin;
+			renderMapPins();
+		});
 	});
 	singleApartmentName.addEventListener("input", () => {
 		updateNameInputState(singleApartmentName, isDuplicateApartmentName(singleApartmentName.value));
 	});
 	singleApartmentForm.addEventListener("submit", (event) => {
 		event.preventDefault();
-		const apartment = new Apartment();
+		const apartment = singleApartmentDraft ?? new Apartment();
 		apartment.name = singleApartmentName.value.trim();
 		const duplicate = isDuplicateApartmentName(apartment.name);
 		updateNameInputState(singleApartmentName, duplicate);
 		if (!apartment.name || duplicate) return;
 		apartments.push(apartment);
+		singleApartmentDraft = null;
 		renderRouteLists();
+		setDefaultChangesDirty(true);
 		singleApartmentDialog.close();
 	});
-	requireElement("cancel-single-apartment").addEventListener("click", () => singleApartmentDialog.close());
+	requireElement("cancel-single-apartment").addEventListener("click", () => {
+		singleApartmentDraft = null;
+		singleApartmentDialog.close();
+		renderMapPins();
+	});
 	singleApartmentDialog.addEventListener("cancel", (event) => event.preventDefault());
+
+	editApartmentAddPin.addEventListener("click", () => {
+		if (!editingApartment) return;
+		beginMapPinSelection(editApartmentDialog, (visualPin) => {
+			editApartmentVisualPin = visualPin;
+			renderMapPins();
+		});
+	});
 
 	editApartmentName.addEventListener("input", () => {
 		updateNameInputState(editApartmentName, isDuplicateApartmentName(editApartmentName.value, editingApartment));
@@ -476,13 +934,20 @@
 		editingApartment.teachingAreas = mergeUniqueAreas([], splitCellValues(editApartmentTeachingAreas.value));
 		editingApartment.pickupAreas = mergeUniqueAreas([], splitCellValues(editApartmentPickupAreas.value));
 		editingApartment.dropoffAreas = mergeUniqueAreas([], splitCellValues(editApartmentDropoffAreas.value));
+		editingApartment.visualPin = editApartmentVisualPin;
 
 		renderRouteLists();
+		setDefaultChangesDirty(true);
 		editApartmentDialog.close();
 	});
 	requireElement("cancel-edit-apartment").addEventListener("click", () => editApartmentDialog.close());
 	editApartmentDialog.addEventListener("cancel", (event) => event.preventDefault());
-	editApartmentDialog.addEventListener("close", () => { editingApartment = null; });
+	editApartmentDialog.addEventListener("close", () => {
+		if (pinSelectionSession?.dialog === editApartmentDialog) return;
+		editingApartment = null;
+		editApartmentVisualPin = null;
+		renderMapPins();
+	});
 
 	requireElement("batch-add-apartments").addEventListener("click", () => {
 		resetBatchApartmentDialog();
@@ -533,9 +998,11 @@
 			apartment.name = candidate.nameInput.value.trim();
 			apartment.phoneNumbers = mergeUniqueStrings(apartment.phoneNumbers, candidate.phoneNumbers);
 			apartment.teachingAreas = mergeUniqueAreas(apartment.teachingAreas, candidate.teachingAreaNames);
+			apartment.visualPin = candidate.visualPin;
 		}
 
 		renderRouteLists();
+		setDefaultChangesDirty(true);
 		batchApartmentDialog.close();
 	});
 
@@ -556,7 +1023,114 @@
 		zoomLevel.textContent = `${Math.round(mapScale / minimumMapScale * 100)}%`;
 		zoomOutButton.disabled = mapScale <= minimumMapScale + 0.0001;
 		zoomInButton.disabled = mapScale >= minimumMapScale * 6 - 0.0001;
+		renderMapPins();
 	}
+
+	function focusApartmentPin(apartment) {
+		if (!apartment.visualPin || !overviewMap.naturalWidth) return;
+		setSidebarOpen(false);
+		window.requestAnimationFrame(() => {
+			fitOverviewMap();
+			mapScale = Math.max(mapScale, minimumMapScale * 2);
+			updateMapSize();
+
+			const imageOffsetX = (mapStage.clientWidth - overviewMap.naturalWidth * mapScale) / 2;
+			const imageOffsetY = (mapStage.clientHeight - overviewMap.naturalHeight * mapScale) / 2;
+			const pinX = imageOffsetX + apartment.visualPin.x * mapScale;
+			const pinY = imageOffsetY + apartment.visualPin.y * mapScale;
+			mapViewport.scrollTo({
+				left: pinX - mapViewport.clientWidth / 2,
+				top: pinY - mapViewport.clientHeight / 2,
+				behavior: "smooth",
+			});
+		});
+	}
+
+	function renderMapPins() {
+		mapStage.querySelectorAll(".map-pin").forEach((marker) => marker.remove());
+		if (!overviewMap.naturalWidth || !mapScale) return;
+
+		const pendingAddressKeys = new Set(pendingBatchApartments.map(({ key }) => key));
+		const savedPins = apartments
+			.filter((apartment) => !pendingAddressKeys.has(normalize(apartment.address)))
+			.map((apartment) => ({
+				apartment,
+				visualPin: apartment === editingApartment ? editApartmentVisualPin : apartment.visualPin,
+			}));
+		if (singleApartmentDraft?.visualPin) {
+			savedPins.push({ apartment: singleApartmentDraft, visualPin: singleApartmentDraft.visualPin });
+		}
+		const pendingPins = pendingBatchApartments.map((candidate) => ({
+			apartment: { name: candidate.nameInput?.value || candidate.teachingAreaNames.join(", "), address: candidate.address },
+			visualPin: candidate.visualPin,
+		}));
+		const imageOffsetX = (mapStage.clientWidth - overviewMap.naturalWidth * mapScale) / 2;
+		const imageOffsetY = (mapStage.clientHeight - overviewMap.naturalHeight * mapScale) / 2;
+
+		for (const { apartment, visualPin } of [...savedPins, ...pendingPins]) {
+			if (!visualPin) continue;
+			const marker = document.createElement("button");
+			marker.className = "map-pin";
+			marker.type = "button";
+			const apartmentLabel = apartment.name || apartment.address || "Apartment";
+			marker.setAttribute("aria-label", `Apartment pin: ${apartmentLabel}`);
+			marker.style.left = `${imageOffsetX + visualPin.x * mapScale}px`;
+			marker.style.top = `${imageOffsetY + visualPin.y * mapScale}px`;
+			marker.innerHTML = '<svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="14" /><path d="m8.5 15 7.5-6 7.5 6M11 14v9h10v-9m-6 9v-6h3v6" /></svg>';
+			const label = document.createElement("span");
+			label.className = "map-pin-label";
+			label.textContent = apartmentLabel;
+			marker.append(label);
+			mapStage.append(marker);
+		}
+	}
+
+	function getVisualPinAtPoint(clientX, clientY) {
+		if (!overviewMap.naturalWidth || !overviewMap.naturalHeight) return null;
+		const bounds = overviewMap.getBoundingClientRect();
+		if (clientX < bounds.left || clientX > bounds.right || clientY < bounds.top || clientY > bounds.bottom) return null;
+		return {
+			x: Math.round((clientX - bounds.left) * overviewMap.naturalWidth / bounds.width),
+			y: Math.round((clientY - bounds.top) * overviewMap.naturalHeight / bounds.height),
+		};
+	}
+
+	function beginMapPinSelection(dialog, onSelect) {
+		if (!overviewMap.naturalWidth) return;
+		pinSelectionSession = {
+			dialog,
+			onSelect,
+			previousTitle: mapTitle.textContent,
+			returnFocus: document.activeElement,
+		};
+		dialog.close();
+		homeView.hidden = true;
+		tripView.hidden = true;
+		routesView.hidden = false;
+		setSidebarOpen(false);
+		routesView.classList.add("pin-picking");
+		pinPickBanner.hidden = false;
+		mapTitle.textContent = "Select apartment location";
+		window.requestAnimationFrame(() => {
+			fitOverviewMap();
+			mapViewport.focus();
+		});
+	}
+
+	function finishMapPinSelection(visualPin = null) {
+		if (!pinSelectionSession) return;
+		const session = pinSelectionSession;
+		pinSelectionSession = null;
+		if (visualPin) session.onSelect(visualPin);
+		routesView.classList.remove("pin-picking");
+		pinPickBanner.hidden = true;
+		mapTitle.textContent = session.previousTitle;
+		renderMapPins();
+		session.dialog.showModal();
+		if (session.returnFocus instanceof HTMLElement) session.returnFocus.focus();
+	}
+
+	cancelPinSelection.addEventListener("click", () => finishMapPinSelection());
 
 	function fitOverviewMap(resetScale = false) {
 		if (!overviewMap.naturalWidth || !mapViewport.clientWidth || !mapViewport.clientHeight) return;
@@ -585,27 +1159,41 @@
 	zoomInButton.addEventListener("click", () => changeMapScale(mapScale * 1.25, mapViewport.clientWidth / 2, mapViewport.clientHeight / 2));
 	zoomFitButton.addEventListener("click", () => fitOverviewMap(true));
 	mapViewport.addEventListener("pointerdown", (event) => {
-		if (event.button !== 0 || event.pointerType !== "mouse") return;
+		if (event.button !== 0) return;
+		if (event.target instanceof Element && event.target.closest(".pin-pick-banner")) return;
+		if (!pinSelectionSession && event.pointerType !== "mouse") return;
+		if (!pinSelectionSession && event.target instanceof Element && event.target.closest(".map-pin")) return;
 		activePanPointer = event.pointerId;
 		panStartX = event.clientX;
 		panStartY = event.clientY;
 		panStartScrollLeft = mapViewport.scrollLeft;
 		panStartScrollTop = mapViewport.scrollTop;
+		panMoved = false;
 		mapViewport.classList.add("is-dragging");
 		mapViewport.setPointerCapture(event.pointerId);
 		event.preventDefault();
 	});
 	mapViewport.addEventListener("pointermove", (event) => {
 		if (event.pointerId !== activePanPointer) return;
+		if (Math.hypot(event.clientX - panStartX, event.clientY - panStartY) > 4) panMoved = true;
 		mapViewport.scrollLeft = panStartScrollLeft - (event.clientX - panStartX);
 		mapViewport.scrollTop = panStartScrollTop - (event.clientY - panStartY);
 	});
+	const finishMapPointer = (event) => {
+		if (event.pointerId !== activePanPointer) return;
+		const selectedPin = pinSelectionSession && !panMoved
+			? getVisualPinAtPoint(event.clientX, event.clientY)
+			: null;
+		activePanPointer = null;
+		mapViewport.classList.remove("is-dragging");
+		if (selectedPin) finishMapPinSelection(selectedPin);
+	};
 	const stopMapPan = (event) => {
 		if (event.pointerId !== activePanPointer) return;
 		activePanPointer = null;
 		mapViewport.classList.remove("is-dragging");
 	};
-	mapViewport.addEventListener("pointerup", stopMapPan);
+	mapViewport.addEventListener("pointerup", finishMapPointer);
 	mapViewport.addEventListener("pointercancel", stopMapPan);
 	mapViewport.addEventListener("lostpointercapture", stopMapPan);
 	mapViewport.addEventListener("wheel", (event) => {
@@ -618,6 +1206,7 @@
 	window.addEventListener("resize", () => {
 		if (!routesView.hidden) fitOverviewMap();
 	});
+	loadSavedDefaults();
 	renderRouteLists();
 
 	function displayName(before, after, period) {

@@ -74,6 +74,7 @@
 	}
 
 	class Route {
+		name = "";
 		apartmentList = [];
 		travelTimeTable = [];
 

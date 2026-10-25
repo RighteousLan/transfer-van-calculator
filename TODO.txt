@@ -1,1 +1,18 @@
-Let's add the functionality to add an appartment. When I click the add appartment button, It should open a pop-up asking for a name, and a pin. When you click the add pin button, it should open up a 
+In the default routes screen. Every instance that has the add pin button should  show coords and say edit pin if there already is a pin.
+The edit screen should show a list of phone numbers and a button to add or remove from the list. Same goes for areas.
+dropoff and pickup areas probably not necesary.
+Move the batch add button to be nicer.
+Batching appartments with existing apartments should ask the user to pick between collisions.
+
+The Arrows are backwards in the add route list.
+Should I add the Edit apartment button to the route list?
+Add functionality to click apartments to add them to the route.
+Route should display visibly with lines from each apartment to the next in the list.
+Make the columns in the route editor more thin
+Display the reordered apartments better, right now it's annoying
+
+Add a delete button to the existing route list, but it has an "are you sure?" popup
+
+
+Add pin button:
+Needs to say the name of the apartment you are placing

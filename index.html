@@ -103,40 +103,80 @@
 	</div>
 	<main id="routes-view" class="routes-view" aria-label="Define default routes" hidden>
 		<aside class="routes-sidebar" id="routes-sidebar" aria-label="Routes and apartments">
-			<header class="sidebar-header">
-				<button class="back-button" id="routes-back" type="button">
-					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 12H5m6 6-6-6 6-6" /></svg>
-					Back
-				</button>
-				<h1>Default routes</h1>
-			</header>
-			<section class="collection-section" aria-labelledby="routes-title">
-				<div class="collection-heading">
-					<h2 id="routes-title">Routes</h2>
-					<span class="collection-count" id="routes-count">0</span>
-				</div>
-				<ul class="collection-list" id="routes-list">
-					<li class="collection-empty">No routes yet</li>
-				</ul>
-				<button class="add-item-button" id="add-route" type="button">
-					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
-					Add route
-				</button>
-			</section>
-			<section class="collection-section" aria-labelledby="apartments-title">
-				<div class="collection-heading">
-					<h2 id="apartments-title">Apartments</h2>
-					<span class="collection-count" id="apartments-count">0</span>
-				</div>
-				<ul class="collection-list" id="apartments-list">
-					<li class="collection-empty">No apartments yet</li>
-				</ul>
-				<div class="apartment-actions">
-					<button class="add-item-button" id="add-apartment" type="button">
+			<div class="route-list-view" id="route-list-view">
+				<header class="sidebar-header">
+					<div class="default-routes-topbar">
+						<button class="back-button" id="routes-back" type="button">
+							<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 12H5m6 6-6-6 6-6" /></svg>
+							Back
+						</button>
+						<button class="primary save-defaults-button" id="save-defaults" type="button" disabled>Save defaults</button>
+					</div>
+					<h1>Default routes</h1>
+					<p class="defaults-save-status" id="defaults-save-status" aria-live="polite">Saved defaults</p>
+				</header>
+				<section class="collection-section" aria-labelledby="routes-title">
+					<div class="collection-heading">
+						<h2 id="routes-title">Routes</h2>
+						<span class="collection-count" id="routes-count">0</span>
+					</div>
+					<ul class="collection-list" id="routes-list">
+						<li class="collection-empty">No routes yet</li>
+					</ul>
+					<button class="add-item-button" id="add-route" type="button">
 						<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
-						Add apartment
+						Add route
 					</button>
-					<button class="batch-add-button" id="batch-add-apartments" type="button">Batch add</button>
+				</section>
+				<section class="collection-section" aria-labelledby="apartments-title">
+					<div class="collection-heading">
+						<h2 id="apartments-title">Apartments</h2>
+						<span class="collection-count" id="apartments-count">0</span>
+					</div>
+					<ul class="collection-list" id="apartments-list">
+						<li class="collection-empty">No apartments yet</li>
+					</ul>
+					<div class="apartment-actions">
+						<button class="add-item-button" id="add-apartment" type="button">
+							<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
+							Add apartment
+						</button>
+						<button class="batch-add-button" id="batch-add-apartments" type="button">Batch add</button>
+					</div>
+				</section>
+			</div>
+			<section class="route-editor-view" id="route-editor-view" hidden aria-label="Edit route">
+				<header class="route-editor-header">
+					<button class="back-button" id="route-editor-back" type="button">
+						<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 12H5m6 6-6-6 6-6" /></svg>
+						Back
+					</button>
+					<div>
+						<p class="eyebrow" id="route-editor-mode">New route</p>
+						<h1 id="route-editor-heading">Route builder</h1>
+					</div>
+				</header>
+				<div class="route-editor-columns">
+					<section class="route-editor-column route-draft-column" aria-labelledby="route-draft-title">
+						<div class="collection-heading">
+							<h2 id="route-draft-title">Route</h2>
+							<span class="collection-count" id="route-draft-count">0</span>
+						</div>
+						<label class="route-name-field" for="route-name-input">Name <span aria-hidden="true">*</span>
+							<input id="route-name-input" type="text" maxlength="120" autocomplete="off" required>
+						</label>
+						<ol class="route-draft-list" id="route-draft-list"></ol>
+						<button class="primary route-save-button" id="save-route" type="button" disabled>Save route</button>
+					</section>
+					<section class="route-editor-column available-apartments-column" aria-labelledby="available-apartments-title">
+						<div class="collection-heading">
+							<h2 id="available-apartments-title">Apartments</h2>
+							<span class="collection-count" id="available-apartment-count">0</span>
+						</div>
+						<label class="apartment-search-label" for="apartment-search">Search apartments</label>
+						<input class="apartment-search" id="apartment-search" type="search" placeholder="Name or teaching area">
+						<ul class="available-apartment-list" id="available-apartment-list"></ul>
+					</section>
 				</div>
 			</section>
 		</aside>
@@ -146,7 +186,7 @@
 				<button class="icon-button sidebar-toggle" id="sidebar-toggle" type="button" aria-label="Open routes and apartments" aria-expanded="false" title="Open menu">
 					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16" /></svg>
 				</button>
-				<p class="map-title">Mission overview</p>
+				<p class="map-title" id="map-title">Mission overview</p>
 				<div class="zoom-controls" aria-label="Map zoom controls">
 					<button class="icon-button" id="zoom-out" type="button" aria-label="Zoom out" title="Zoom out">
 						<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M5 12h14" /></svg>
@@ -164,6 +204,10 @@
 				<div class="map-stage" id="map-stage">
 					<img id="overview-map" src="./overview-2246341-1.png" alt="Overview map of the Philippines Dumaguete Mission" draggable="false">
 				</div>
+				<div class="pin-pick-banner" id="pin-pick-banner" hidden>
+					<span>Click or tap the map to place the apartment pin.</span>
+					<button class="secondary" id="cancel-pin-selection" type="button">Cancel pin</button>
+				</div>
 			</div>
 		</section>
 	</main>
@@ -178,7 +222,7 @@
 			<label class="dialog-field" for="single-apartment-name">Apartment name
 				<input id="single-apartment-name" name="apartmentName" type="text" maxlength="120" autocomplete="off" required>
 			</label>
-			<button class="secondary pin-action" type="button">Add pin</button>
+			<button class="secondary pin-action" id="single-apartment-add-pin" type="button">Add pin</button>
 			<footer class="dialog-actions">
 				<button class="secondary" id="cancel-single-apartment" type="button">Cancel</button>
 				<button class="primary" type="submit">Add apartment</button>
@@ -213,7 +257,7 @@
 					<textarea id="edit-apartment-dropoff-areas" rows="3" placeholder="Separate areas with commas or new lines"></textarea>
 				</label>
 			</div>
-			<button class="secondary pin-action" type="button">Add pin</button>
+			<button class="secondary pin-action" id="edit-apartment-add-pin" type="button">Add pin</button>
 			<footer class="dialog-actions">
 				<button class="secondary" id="cancel-edit-apartment" type="button">Cancel</button>
 				<button class="primary" type="submit">Save apartment</button>
@@ -249,6 +293,21 @@
 				<button class="primary" id="save-batch-apartments" type="submit" hidden>Add apartments</button>
 			</footer>
 		</form>
+	</dialog>
+	<dialog class="workflow-dialog defaults-confirm-dialog" id="defaults-confirm-dialog" aria-labelledby="defaults-confirm-title">
+		<div class="defaults-confirm-content">
+			<header class="dialog-header">
+				<div>
+					<p class="eyebrow">Default routes</p>
+					<h2 id="defaults-confirm-title">Save these defaults?</h2>
+				</div>
+			</header>
+			<p class="defaults-confirm-message" id="defaults-confirm-message"></p>
+			<footer class="dialog-actions">
+				<button class="secondary" id="defaults-confirm-cancel" type="button">Cancel</button>
+				<button class="primary" id="defaults-confirm-accept" type="button">Save defaults</button>
+			</footer>
+		</div>
 	</dialog>
 	<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 	<script src="./src/models.js"></script>
