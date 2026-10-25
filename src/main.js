@@ -42,8 +42,34 @@
 	const zoomInButton = requireElement("zoom-in");
 	const zoomFitButton = requireElement("zoom-fit");
 	const zoomLevel = requireElement("zoom-level");
+	const singleApartmentDialog = requireElement("single-apartment-dialog");
+	const singleApartmentForm = requireElement("single-apartment-form");
+	const singleApartmentName = requireElement("single-apartment-name");
+	const editApartmentDialog = requireElement("edit-apartment-dialog");
+	const editApartmentForm = requireElement("edit-apartment-form");
+	const editApartmentName = requireElement("edit-apartment-name");
+	const editApartmentAddress = requireElement("edit-apartment-address");
+	const editApartmentPhones = requireElement("edit-apartment-phones");
+	const editApartmentTeachingAreas = requireElement("edit-apartment-teaching-areas");
+	const editApartmentPickupAreas = requireElement("edit-apartment-pickup-areas");
+	const editApartmentDropoffAreas = requireElement("edit-apartment-dropoff-areas");
+	const batchApartmentDialog = requireElement("batch-apartment-dialog");
+	const batchApartmentForm = requireElement("batch-apartment-form");
+	const batchApartmentFile = requireElement("batch-apartment-file");
+	const batchApartmentDropzone = requireElement("batch-apartment-dropzone");
+	const batchApartmentFilename = requireElement("batch-apartment-filename");
+	const batchApartmentStatus = requireElement("batch-apartment-status");
+	const batchApartmentReview = requireElement("batch-apartment-review");
+	const batchApartmentReviewSummary = requireElement("batch-apartment-review-summary");
+	const batchApartmentReviewList = requireElement("batch-apartment-review-list");
+	const saveBatchApartments = requireElement("save-batch-apartments");
+	const batchApartmentUnnamedCount = requireElement("batch-apartment-unnamed-count");
+	const batchApartmentDuplicateCount = requireElement("batch-apartment-duplicate-count");
 	let minimumMapScale = 0;
 	let mapScale = 0;
+	let pendingBatchApartments = [];
+	let editingApartment = null;
+	let apartmentTeachingAreaDistrict = null;
 	let activePanPointer = null;
 	let panStartX = 0;
 	let panStartY = 0;
@@ -98,10 +124,295 @@
 		} else {
 			apartments.forEach((apartment, index) => {
 				const item = document.createElement("li");
-				item.className = "collection-item";
-				item.textContent = apartment.name || apartment.address || `Apartment ${index + 1}`;
+				item.className = "apartment-list-row";
+				const label = document.createElement("span");
+				label.className = "apartment-list-name";
+				label.textContent = apartment.name || apartment.address || `Apartment ${index + 1}`;
+				const actions = document.createElement("div");
+				actions.className = "apartment-list-actions";
+				const editButton = document.createElement("button");
+				editButton.className = "apartment-row-action";
+				editButton.type = "button";
+				editButton.setAttribute("aria-label", "Edit apartment");
+				editButton.title = "Edit apartment";
+				editButton.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 5 4 4M4 20l4-.8L19 8a2.1 2.1 0 0 0-3-3L5 16l-1 4Z" /></svg>';
+				editButton.addEventListener("click", () => openEditApartment(apartment));
+				const deleteButton = document.createElement("button");
+				deleteButton.className = "apartment-row-action delete-apartment";
+				deleteButton.type = "button";
+				deleteButton.setAttribute("aria-label", "Delete apartment");
+				deleteButton.title = "Delete apartment";
+				deleteButton.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M10 11v6m4-6v6M5 7l1 14h12l1-14M9 7V4h6v3" /></svg>';
+				deleteButton.addEventListener("click", () => deleteApartment(apartment));
+				actions.append(editButton, deleteButton);
+				item.append(label, actions);
 				apartmentsList.append(item);
 			});
+		}
+	}
+
+	function isDuplicateApartmentName(name, exceptApartment = null) {
+		const key = normalize(name.trim());
+		return Boolean(key) && apartments.some((apartment) =>
+			apartment !== exceptApartment && normalize(apartment.name) === key);
+	}
+
+	function apartmentAreaText(areas) {
+		return areas.map((area) => area.nameBefore || area.nameAfter).filter(Boolean).join("\n");
+	}
+
+	function openEditApartment(apartment) {
+		editingApartment = apartment;
+		editApartmentForm.reset();
+		editApartmentName.value = apartment.name;
+		editApartmentAddress.value = apartment.address;
+		editApartmentPhones.value = apartment.phoneNumbers.join("\n");
+		editApartmentTeachingAreas.value = apartmentAreaText(apartment.teachingAreas);
+		editApartmentPickupAreas.value = apartmentAreaText(apartment.pickupAreas);
+		editApartmentDropoffAreas.value = apartmentAreaText(apartment.dropoffAreas);
+		updateNameInputState(editApartmentName, isDuplicateApartmentName(apartment.name, apartment));
+		editApartmentDialog.showModal();
+		editApartmentName.focus();
+	}
+
+	function deleteApartment(apartment) {
+		const index = apartments.indexOf(apartment);
+		if (index === -1) return;
+		apartments.splice(index, 1);
+		for (const route of routes) {
+			const apartmentIndex = route.apartmentList.indexOf(apartment);
+			if (apartmentIndex === -1) continue;
+			route.apartmentList.splice(apartmentIndex, 1);
+			route.travelTimeTable.splice(apartmentIndex, 1);
+			for (const row of route.travelTimeTable) row.splice(apartmentIndex, 1);
+		}
+		renderRouteLists();
+	}
+
+	function resetBatchApartmentDialog() {
+		pendingBatchApartments = [];
+		batchApartmentForm.reset();
+		batchApartmentFilename.textContent = "";
+		batchApartmentStatus.textContent = "";
+		batchApartmentStatus.classList.remove("error");
+		batchApartmentReview.hidden = true;
+		batchApartmentReviewSummary.textContent = "";
+		batchApartmentReviewList.replaceChildren();
+		saveBatchApartments.hidden = true;
+		batchApartmentUnnamedCount.hidden = true;
+		batchApartmentUnnamedCount.textContent = "";
+		batchApartmentDuplicateCount.hidden = true;
+		batchApartmentDuplicateCount.textContent = "";
+		batchApartmentDropzone.hidden = false;
+		batchApartmentDropzone.classList.remove("drag-over");
+	}
+
+	function updateNameInputState(input, isDuplicate = false) {
+		const missing = !input.value.trim();
+		input.classList.toggle("is-missing", missing);
+		input.classList.toggle("is-duplicate", isDuplicate);
+		input.setAttribute("aria-invalid", String(missing || isDuplicate));
+		input.setCustomValidity(isDuplicate ? "Apartment names must be unique." : "");
+	}
+
+	function updateBatchApartmentNameState() {
+		const missingCount = pendingBatchApartments.filter(({ nameInput }) => !nameInput.value.trim()).length;
+		batchApartmentUnnamedCount.textContent = `${missingCount} ${missingCount === 1 ? "apartment" : "apartments"} without names`;
+		batchApartmentUnnamedCount.hidden = missingCount === 0;
+
+		const reviewedAddresses = new Set(pendingBatchApartments.map(({ key }) => key));
+		const nameCounts = new Map();
+		for (const apartment of apartments) {
+			if (reviewedAddresses.has(normalize(apartment.address))) continue;
+			const nameKey = normalize(apartment.name);
+			if (nameKey) nameCounts.set(nameKey, (nameCounts.get(nameKey) ?? 0) + 1);
+		}
+		for (const { nameInput } of pendingBatchApartments) {
+			const nameKey = normalize(nameInput.value.trim());
+			if (nameKey) nameCounts.set(nameKey, (nameCounts.get(nameKey) ?? 0) + 1);
+		}
+		const duplicateNameKeys = new Set([...nameCounts]
+			.filter(([, count]) => count > 1)
+			.map(([nameKey]) => nameKey));
+		for (const { nameInput } of pendingBatchApartments) {
+			updateNameInputState(nameInput, duplicateNameKeys.has(normalize(nameInput.value.trim())));
+		}
+		const duplicateCount = [...nameCounts.values()]
+			.filter((count) => count > 1)
+			.reduce((total, count) => total + count, 0);
+		batchApartmentDuplicateCount.textContent = `${duplicateCount} ${duplicateCount === 1 ? "apartment has a duplicate name" : "apartments have duplicate names"}`;
+		batchApartmentDuplicateCount.hidden = duplicateCount === 0;
+		const hasInvalidFields = [...batchApartmentForm.elements]
+			.some((field) => field.willValidate && !field.validity.valid);
+		saveBatchApartments.disabled = missingCount > 0 || duplicateCount > 0 || hasInvalidFields;
+	}
+
+	function splitCellValues(value) {
+		return String(value ?? "")
+			.split(/[,;|\r\n]+/)
+			.map((part) => part.trim())
+			.filter(Boolean);
+	}
+
+	function mergeUniqueStrings(existing, incoming) {
+		const merged = [...existing];
+		const keys = new Set(merged.map(normalize));
+		for (const value of incoming) {
+			const key = normalize(value);
+			if (!key || keys.has(key)) continue;
+			keys.add(key);
+			merged.push(value);
+		}
+		return merged;
+	}
+
+	function collectUniqueAddresses(rows) {
+		const grouped = new Map();
+
+		for (const { row, rowNumber } of rows) {
+			const teachingArea = String(row[2] ?? "").trim();
+			const phoneNumber = String(row[3] ?? "").trim();
+			const address = String(row[4] ?? "").trim();
+			if (!address) throw new Error(`Row ${rowNumber} is missing an address.`);
+			const key = normalize(address);
+			if (!key) throw new Error(`Row ${rowNumber} has an invalid address.`);
+
+			let candidate = grouped.get(key);
+			if (!candidate) {
+				candidate = { key, address, phoneNumbers: [], teachingAreaNames: [] };
+				grouped.set(key, candidate);
+			}
+
+			candidate.phoneNumbers = mergeUniqueStrings(candidate.phoneNumbers, splitCellValues(phoneNumber));
+			candidate.teachingAreaNames = mergeUniqueStrings(candidate.teachingAreaNames, splitCellValues(teachingArea));
+		}
+
+		return [...grouped.values()];
+	}
+
+	function findOrCreateApartmentTeachingArea(name) {
+		const key = normalize(name);
+		for (const zone of zones) {
+			for (const district of zone.districts) {
+				const match = district.areas.find((area) =>
+					normalize(area.nameBefore) === key || normalize(area.nameAfter) === key);
+				if (match) return match;
+			}
+		}
+
+		if (!apartmentTeachingAreaDistrict) apartmentTeachingAreaDistrict = new District(new Zone());
+		const area = new Area(apartmentTeachingAreaDistrict);
+		area.nameBefore = name;
+		return area;
+	}
+
+	function mergeUniqueAreas(existing, areaNames) {
+		const merged = [...existing];
+		const keys = new Set(merged.flatMap((area) => [normalize(area.nameBefore), normalize(area.nameAfter)]));
+		for (const name of areaNames) {
+			const key = normalize(name);
+			if (!key || keys.has(key)) continue;
+			keys.add(key);
+			merged.push(findOrCreateApartmentTeachingArea(name));
+		}
+		return merged;
+	}
+
+	function renderBatchApartmentReview(candidates) {
+		pendingBatchApartments = candidates.map((candidate, index) => {
+			const existing = apartments.find((apartment) => normalize(apartment.address) === candidate.key);
+			const entry = document.createElement("article");
+			entry.className = "batch-review-entry";
+			const addressText = document.createElement("p");
+			addressText.className = "batch-address";
+			addressText.textContent = candidate.address;
+			const phoneText = document.createElement("p");
+			phoneText.textContent = `Phone numbers: ${candidate.phoneNumbers.join(", ") || "None"}`;
+			const areaText = document.createElement("p");
+			areaText.className = "teaching-area-names";
+			const areaLabel = document.createElement("span");
+			areaLabel.textContent = "Teaching areas: ";
+			const areaNames = document.createElement("strong");
+			areaNames.textContent = candidate.teachingAreaNames.join(", ") || "None";
+			areaText.append(areaLabel, areaNames);
+			const nameLabel = document.createElement("label");
+			nameLabel.className = "dialog-field";
+			nameLabel.textContent = "Apartment name";
+			const nameInput = document.createElement("input");
+			nameInput.id = `batch-apartment-name-${index}`;
+			nameLabel.htmlFor = nameInput.id;
+			nameInput.name = "apartmentNames";
+			nameInput.type = "text";
+			nameInput.maxLength = 120;
+			nameInput.autocomplete = "off";
+			nameInput.required = true;
+			nameInput.value = existing?.name || (candidate.teachingAreaNames.length === 1 ? candidate.teachingAreaNames[0] : "");
+			nameInput.addEventListener("input", updateBatchApartmentNameState);
+			nameLabel.append(nameInput);
+			const pinButton = document.createElement("button");
+			pinButton.className = "secondary pin-action";
+			pinButton.type = "button";
+			pinButton.textContent = "Add pin";
+			entry.append(nameLabel, addressText, phoneText, areaText, pinButton);
+			batchApartmentReviewList.append(entry);
+			return { ...candidate, nameInput };
+		});
+
+		batchApartmentReviewSummary.textContent = `${candidates.length} unique ${candidates.length === 1 ? "address" : "addresses"}. Review the details and enter a name for each apartment.`;
+		batchApartmentReview.hidden = false;
+		saveBatchApartments.hidden = false;
+		updateBatchApartmentNameState();
+	}
+
+	async function loadBatchApartmentFile(file) {
+		pendingBatchApartments = [];
+		batchApartmentFilename.textContent = file.name;
+		batchApartmentStatus.classList.remove("error");
+		batchApartmentReview.hidden = true;
+		batchApartmentReviewList.replaceChildren();
+		batchApartmentUnnamedCount.hidden = true;
+		saveBatchApartments.hidden = true;
+
+		if (!file.name.toLowerCase().endsWith(".xlsx")) {
+			batchApartmentStatus.textContent = "Please choose an .xlsx file.";
+			batchApartmentStatus.classList.add("error");
+			return;
+		}
+		if (!window.XLSX) {
+			batchApartmentStatus.textContent = "The spreadsheet reader did not load. Check your internet connection and reload the page.";
+			batchApartmentStatus.classList.add("error");
+			return;
+		}
+
+		batchApartmentStatus.textContent = "Reading workbook...";
+		try {
+			const workbook = window.XLSX.read(await file.arrayBuffer(), { type: "array" });
+			const firstSheetName = workbook.SheetNames[0];
+			if (!firstSheetName) throw new Error("The workbook does not contain a worksheet.");
+			const worksheetRows = window.XLSX.utils.sheet_to_json(workbook.Sheets[firstSheetName], {
+				header: 1,
+				defval: "",
+				raw: false,
+			});
+			const firstRow = worksheetRows[0] ?? [];
+			const possibleHeader = [firstRow[2], firstRow[3], firstRow[4]].map((value) => normalize(String(value ?? "")));
+			const hasHeader = possibleHeader.some((value) => value.includes("area") || value.includes("phone") || value.includes("address"));
+			const firstDataRow = hasHeader ? 1 : 0;
+			const rows = worksheetRows
+				.slice(firstDataRow)
+				.map((row, index) => ({ row, rowNumber: index + firstDataRow + 1 }))
+				.filter(({ row }) => row.some((value) => String(value).trim() !== ""));
+			if (rows.length === 0) throw new Error("The first worksheet contains no data rows.");
+
+			const candidates = collectUniqueAddresses(rows);
+			if (candidates.length === 0) throw new Error("No apartment addresses were found.");
+			batchApartmentReviewList.replaceChildren();
+			renderBatchApartmentReview(candidates);
+			batchApartmentDropzone.hidden = true;
+			batchApartmentStatus.textContent = "Review the apartments below before adding them.";
+		} catch (error) {
+			batchApartmentStatus.textContent = error instanceof Error ? error.message : "Could not read this workbook.";
+			batchApartmentStatus.classList.add("error");
 		}
 	}
 
@@ -126,8 +437,106 @@
 	});
 
 	requireElement("add-apartment").addEventListener("click", () => {
-		apartments.push(new Apartment());
+		singleApartmentForm.reset();
+		updateNameInputState(singleApartmentName);
+		singleApartmentDialog.showModal();
+		singleApartmentName.focus();
+	});
+	singleApartmentName.addEventListener("input", () => {
+		updateNameInputState(singleApartmentName, isDuplicateApartmentName(singleApartmentName.value));
+	});
+	singleApartmentForm.addEventListener("submit", (event) => {
+		event.preventDefault();
+		const apartment = new Apartment();
+		apartment.name = singleApartmentName.value.trim();
+		const duplicate = isDuplicateApartmentName(apartment.name);
+		updateNameInputState(singleApartmentName, duplicate);
+		if (!apartment.name || duplicate) return;
+		apartments.push(apartment);
 		renderRouteLists();
+		singleApartmentDialog.close();
+	});
+	requireElement("cancel-single-apartment").addEventListener("click", () => singleApartmentDialog.close());
+	singleApartmentDialog.addEventListener("cancel", (event) => event.preventDefault());
+
+	editApartmentName.addEventListener("input", () => {
+		updateNameInputState(editApartmentName, isDuplicateApartmentName(editApartmentName.value, editingApartment));
+	});
+	editApartmentForm.addEventListener("submit", (event) => {
+		event.preventDefault();
+		if (!editingApartment) return;
+		const name = editApartmentName.value.trim();
+		const duplicate = isDuplicateApartmentName(name, editingApartment);
+		updateNameInputState(editApartmentName, duplicate);
+		if (!name || duplicate || !editApartmentForm.reportValidity()) return;
+
+		editingApartment.name = name;
+		editingApartment.address = editApartmentAddress.value.trim();
+		editingApartment.phoneNumbers = mergeUniqueStrings([], splitCellValues(editApartmentPhones.value));
+		editingApartment.teachingAreas = mergeUniqueAreas([], splitCellValues(editApartmentTeachingAreas.value));
+		editingApartment.pickupAreas = mergeUniqueAreas([], splitCellValues(editApartmentPickupAreas.value));
+		editingApartment.dropoffAreas = mergeUniqueAreas([], splitCellValues(editApartmentDropoffAreas.value));
+
+		renderRouteLists();
+		editApartmentDialog.close();
+	});
+	requireElement("cancel-edit-apartment").addEventListener("click", () => editApartmentDialog.close());
+	editApartmentDialog.addEventListener("cancel", (event) => event.preventDefault());
+	editApartmentDialog.addEventListener("close", () => { editingApartment = null; });
+
+	requireElement("batch-add-apartments").addEventListener("click", () => {
+		resetBatchApartmentDialog();
+		batchApartmentDialog.showModal();
+	});
+	requireElement("cancel-batch-apartment").addEventListener("click", () => batchApartmentDialog.close());
+	batchApartmentDialog.addEventListener("cancel", (event) => event.preventDefault());
+	batchApartmentDialog.addEventListener("close", resetBatchApartmentDialog);
+	batchApartmentFile.addEventListener("change", () => {
+		const file = batchApartmentFile.files?.[0];
+		if (file) void loadBatchApartmentFile(file);
+	});
+	let batchDragDepth = 0;
+	batchApartmentDropzone.addEventListener("dragenter", (event) => {
+		event.preventDefault();
+		batchDragDepth += 1;
+		batchApartmentDropzone.classList.add("drag-over");
+	});
+	batchApartmentDropzone.addEventListener("dragover", (event) => {
+		event.preventDefault();
+		if (event.dataTransfer) event.dataTransfer.dropEffect = "copy";
+	});
+	batchApartmentDropzone.addEventListener("dragleave", (event) => {
+		event.preventDefault();
+		batchDragDepth = Math.max(0, batchDragDepth - 1);
+		if (batchDragDepth === 0) batchApartmentDropzone.classList.remove("drag-over");
+	});
+	batchApartmentDropzone.addEventListener("drop", (event) => {
+		event.preventDefault();
+		batchDragDepth = 0;
+		batchApartmentDropzone.classList.remove("drag-over");
+		const file = event.dataTransfer?.files[0];
+		if (file) void loadBatchApartmentFile(file);
+	});
+	batchApartmentForm.addEventListener("submit", (event) => {
+		event.preventDefault();
+		if (!pendingBatchApartments.length) return;
+		updateBatchApartmentNameState();
+		if (saveBatchApartments.disabled || !batchApartmentForm.reportValidity()) return;
+
+		for (const candidate of pendingBatchApartments) {
+			let apartment = apartments.find((existing) => normalize(existing.address) === candidate.key);
+			if (!apartment) {
+				apartment = new Apartment();
+				apartment.address = candidate.address;
+				apartments.push(apartment);
+			}
+			apartment.name = candidate.nameInput.value.trim();
+			apartment.phoneNumbers = mergeUniqueStrings(apartment.phoneNumbers, candidate.phoneNumbers);
+			apartment.teachingAreas = mergeUniqueAreas(apartment.teachingAreas, candidate.teachingAreaNames);
+		}
+
+		renderRouteLists();
+		batchApartmentDialog.close();
 	});
 
 	sidebarToggle.addEventListener("click", () => {
@@ -200,7 +609,6 @@
 	mapViewport.addEventListener("pointercancel", stopMapPan);
 	mapViewport.addEventListener("lostpointercapture", stopMapPan);
 	mapViewport.addEventListener("wheel", (event) => {
-		if (!event.ctrlKey && !event.metaKey) return;
 		event.preventDefault();
 		const bounds = mapViewport.getBoundingClientRect();
 		const factor = event.deltaY < 0 ? 1.15 : 1 / 1.15;

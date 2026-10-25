@@ -131,10 +131,13 @@
 				<ul class="collection-list" id="apartments-list">
 					<li class="collection-empty">No apartments yet</li>
 				</ul>
-				<button class="add-item-button" id="add-apartment" type="button">
-					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
-					Add apartment
-				</button>
+				<div class="apartment-actions">
+					<button class="add-item-button" id="add-apartment" type="button">
+						<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
+						Add apartment
+					</button>
+					<button class="batch-add-button" id="batch-add-apartments" type="button">Batch add</button>
+				</div>
 			</section>
 		</aside>
 		<button class="sidebar-backdrop" id="sidebar-backdrop" type="button" aria-label="Close menu" tabindex="-1"></button>
@@ -164,6 +167,89 @@
 			</div>
 		</section>
 	</main>
+	<dialog class="workflow-dialog" id="single-apartment-dialog" aria-labelledby="single-apartment-title">
+		<form id="single-apartment-form">
+			<header class="dialog-header">
+				<div>
+					<p class="eyebrow">Apartment list</p>
+					<h2 id="single-apartment-title">Add apartment</h2>
+				</div>
+			</header>
+			<label class="dialog-field" for="single-apartment-name">Apartment name
+				<input id="single-apartment-name" name="apartmentName" type="text" maxlength="120" autocomplete="off" required>
+			</label>
+			<button class="secondary pin-action" type="button">Add pin</button>
+			<footer class="dialog-actions">
+				<button class="secondary" id="cancel-single-apartment" type="button">Cancel</button>
+				<button class="primary" type="submit">Add apartment</button>
+			</footer>
+		</form>
+	</dialog>
+	<dialog class="workflow-dialog apartment-edit-dialog" id="edit-apartment-dialog" aria-labelledby="edit-apartment-title">
+		<form class="apartment-edit-form" id="edit-apartment-form">
+			<header class="dialog-header">
+				<div>
+					<p class="eyebrow">Apartment list</p>
+					<h2 id="edit-apartment-title">Edit apartment</h2>
+				</div>
+			</header>
+			<div class="edit-fields">
+				<label class="dialog-field edit-field-wide" for="edit-apartment-name">Apartment name
+					<input id="edit-apartment-name" type="text" maxlength="120" autocomplete="off" required>
+				</label>
+				<label class="dialog-field edit-field-wide" for="edit-apartment-address">Address
+					<input id="edit-apartment-address" type="text" autocomplete="street-address">
+				</label>
+				<label class="dialog-field" for="edit-apartment-phones">Phone numbers
+					<textarea id="edit-apartment-phones" rows="3" placeholder="Separate numbers with commas or new lines"></textarea>
+				</label>
+				<label class="dialog-field" for="edit-apartment-teaching-areas">Teaching areas
+					<textarea id="edit-apartment-teaching-areas" rows="3" placeholder="Separate areas with commas or new lines"></textarea>
+				</label>
+				<label class="dialog-field" for="edit-apartment-pickup-areas">Pickup areas
+					<textarea id="edit-apartment-pickup-areas" rows="3" placeholder="Separate areas with commas or new lines"></textarea>
+				</label>
+				<label class="dialog-field" for="edit-apartment-dropoff-areas">Dropoff areas
+					<textarea id="edit-apartment-dropoff-areas" rows="3" placeholder="Separate areas with commas or new lines"></textarea>
+				</label>
+			</div>
+			<button class="secondary pin-action" type="button">Add pin</button>
+			<footer class="dialog-actions">
+				<button class="secondary" id="cancel-edit-apartment" type="button">Cancel</button>
+				<button class="primary" type="submit">Save apartment</button>
+			</footer>
+		</form>
+	</dialog>
+	<dialog class="workflow-dialog batch-dialog" id="batch-apartment-dialog" aria-labelledby="batch-apartment-title">
+		<form id="batch-apartment-form">
+			<header class="dialog-header">
+				<div>
+					<p class="eyebrow">Apartment list</p>
+					<h2 id="batch-apartment-title">Batch add apartments</h2>
+				</div>
+			</header>
+			<div class="batch-dropzone" id="batch-apartment-dropzone">
+				<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 16V4m-5 5 5-5 5 5M4 16v4h16v-4" /></svg>
+				<p>Drop an .xlsx file here, or choose one</p>
+				<label class="upload-button" for="batch-apartment-file">Choose file</label>
+				<input class="file-input" id="batch-apartment-file" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet">
+				<span class="file-name" id="batch-apartment-filename" aria-live="polite"></span>
+				<span class="upload-status" id="batch-apartment-status" aria-live="polite"></span>
+			</div>
+			<section class="batch-review" id="batch-apartment-review" hidden aria-label="Review apartments">
+				<p class="review-intro" id="batch-apartment-review-summary"></p>
+				<div class="batch-review-list" id="batch-apartment-review-list"></div>
+			</section>
+			<footer class="dialog-actions batch-dialog-actions">
+				<button class="secondary" id="cancel-batch-apartment" type="button">Cancel</button>
+				<div class="batch-validation-errors">
+					<span class="unnamed-count" id="batch-apartment-unnamed-count" aria-live="polite" hidden></span>
+					<span class="duplicate-name-warning" id="batch-apartment-duplicate-count" role="alert" hidden></span>
+				</div>
+				<button class="primary" id="save-batch-apartments" type="submit" hidden>Add apartments</button>
+			</footer>
+		</form>
+	</dialog>
 	<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 	<script src="./src/models.js"></script>
 	<script src="./src/main.js"></script>
