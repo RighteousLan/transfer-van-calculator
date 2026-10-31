@@ -695,6 +695,15 @@ button svg, .upload-button svg { width: 17px; height: 17px; }
 	padding: 0 14px;
 }
 
+.routes-view #add-route:disabled,
+.routes-view #add-route:disabled:hover {
+	transform: none;
+	border-color: #cfd8d0;
+	color: #89958d;
+	background: #edf0ea;
+	cursor: not-allowed;
+}
+
 .add-item-button svg { width: 17px; height: 17px; }
 
 .apartment-actions {
@@ -703,6 +712,22 @@ button svg, .upload-button svg { width: 17px; height: 17px; }
 }
 
 .apartment-actions .add-item-button { flex: 1; }
+
+.defaults-file-footer {
+	display: flex;
+	flex: 0 0 auto;
+	gap: 10px;
+	padding-top: 14px;
+	border-top: 1px solid var(--line);
+}
+
+.defaults-file-footer button {
+	flex: 1;
+	min-height: 42px;
+	justify-content: center;
+	padding: 0 10px;
+	font-size: 12px;
+}
 
 .batch-add-button {
 	min-height: 44px;

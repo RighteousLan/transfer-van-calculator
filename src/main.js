@@ -42,6 +42,9 @@
 	const defaultsConfirmMessage = requireElement("defaults-confirm-message");
 	const defaultsConfirmCancel = requireElement("defaults-confirm-cancel");
 	const defaultsConfirmAccept = requireElement("defaults-confirm-accept");
+	const exportDefaultsButton = requireElement("export-defaults");
+	const openDefaultsButton = requireElement("open-defaults");
+	const defaultsJsonFile = requireElement("defaults-json-file");
 	const missionaryOutput = requireElement("missionary-output");
 	const zoneOutput = requireElement("zone-output");
 	const dataSummary = requireElement("data-summary");
@@ -97,6 +100,7 @@
 	let draggedRouteApartment = null;
 	let hasUnsavedDefaultChanges = false;
 	let defaultsConfirmationAction = null;
+	let defaultsInitialization = Promise.resolve();
 	let singleApartmentDraft = null;
 	let editingApartment = null;
 	let editApartmentVisualPin = null;
@@ -130,6 +134,20 @@
 	}
 
 	const DEFAULTS_STORAGE_KEY = "transfer-van-calculator.defaults.v1";
+	const BUILT_IN_ROUTE_NAMES = [
+		"North to Duma",
+		"South to Duma",
+		"Duma to North",
+		"Duma to South",
+	];
+
+	function createBuiltInRoutes() {
+		return BUILT_IN_ROUTE_NAMES.map((name) => {
+			const route = new Route();
+			route.name = name;
+			return route;
+		});
+	}
 
 	function setDefaultChangesDirty(isDirty, status = "") {
 		hasUnsavedDefaultChanges = isDirty;
@@ -204,43 +222,80 @@
 		};
 	}
 
+	function deserializeDefaultData(data) {
+		if (!data || !Array.isArray(data.apartments) || !Array.isArray(data.routes)) {
+			throw new Error("JSON must contain apartments and routes arrays.");
+		}
+		if (data.version !== undefined && data.version !== 1) throw new Error("This JSON version is not supported.");
+
+		const restoredApartments = data.apartments.map(restoreApartment);
+		const restoredRoutes = data.routes.map((routeData) => {
+			const route = new Route();
+			route.name = String(routeData?.name ?? "");
+			for (const apartmentIndex of routeData?.apartmentIndexes ?? []) {
+				const apartment = restoredApartments[apartmentIndex];
+				if (apartment) route.addApartment(apartment);
+			}
+			const storedTravelTimes = routeData?.travelTimes ?? [];
+			route.travelTimeTable = route.apartmentList.map((_, rowIndex) =>
+				route.apartmentList.map((_, columnIndex) => {
+					const time = storedTravelTimes[rowIndex]?.[columnIndex];
+					return typeof time === "number" && Number.isFinite(time) ? time : null;
+				}));
+			return route;
+		});
+		return { restoredApartments, restoredRoutes };
+	}
+
+	function replaceDefaultData(data) {
+		const { restoredApartments, restoredRoutes } = deserializeDefaultData(data);
+		apartments.splice(0, apartments.length, ...restoredApartments);
+		routes.splice(0, routes.length, ...restoredRoutes);
+	}
+
 	function loadSavedDefaults() {
 		try {
 			const saved = localStorage.getItem(DEFAULTS_STORAGE_KEY);
-			if (!saved) {
-				apartments.splice(0, apartments.length);
-				routes.splice(0, routes.length);
-				setDefaultChangesDirty(false);
-				return true;
-			}
-			const data = JSON.parse(saved);
-			if (data?.version !== 1) throw new Error("Saved defaults use an unsupported version.");
-			const restoredApartments = Array.isArray(data.apartments) ? data.apartments.map(restoreApartment) : [];
-			const restoredRoutes = Array.isArray(data.routes) ? data.routes.map((routeData) => {
-				const route = new Route();
-				route.name = String(routeData?.name ?? "");
-				for (const apartmentIndex of routeData?.apartmentIndexes ?? []) {
-					const apartment = restoredApartments[apartmentIndex];
-					if (apartment) route.addApartment(apartment);
-				}
-				const storedTravelTimes = routeData?.travelTimes ?? [];
-				route.travelTimeTable = route.apartmentList.map((_, rowIndex) =>
-					route.apartmentList.map((_, columnIndex) => {
-						const time = storedTravelTimes[rowIndex]?.[columnIndex];
-						return typeof time === "number" && Number.isFinite(time) ? time : null;
-					}));
-				return route;
-			}) : [];
-			apartments.splice(0, apartments.length, ...restoredApartments);
-			routes.splice(0, routes.length, ...restoredRoutes);
+			if (!saved) return false;
+			replaceDefaultData(JSON.parse(saved));
 			setDefaultChangesDirty(false);
 			return true;
 		} catch (error) {
 			apartments.splice(0, apartments.length);
 			routes.splice(0, routes.length);
-			setDefaultChangesDirty(false, "Could not load saved defaults");
 			return false;
 		}
+	}
+
+	async function loadRootTravelsJson() {
+		const response = await fetch("./travels.json", { cache: "no-store" });
+		if (!response.ok) return false;
+		replaceDefaultData(await response.json());
+		setDefaultChangesDirty(false);
+		return true;
+	}
+
+	async function initializeDefaultData() {
+		if (loadSavedDefaults()) {
+			renderRouteLists();
+			return;
+		}
+
+		try {
+			if (await loadRootTravelsJson()) {
+				renderRouteLists();
+				return;
+			}
+		} catch (error) {
+			if (window.location.protocol === "file:") {
+				defaultsSaveStatus.textContent = "Open JSON to load travels.json when opening this file directly.";
+			}
+		}
+
+		apartments.splice(0, apartments.length);
+		routes.splice(0, routes.length, ...createBuiltInRoutes());
+		if (window.location.protocol !== "file:") setDefaultChangesDirty(false, "Using built-in routes");
+		renderRouteLists();
 	}
 
 	function persistDefaultData() {
@@ -252,6 +307,53 @@
 			setDefaultChangesDirty(true, "Could not save defaults");
 			return false;
 		}
+	}
+
+	async function openDefaultsJson(file) {
+		try {
+			const data = JSON.parse(await file.text());
+			const restored = deserializeDefaultData(data);
+			apartments.splice(0, apartments.length, ...restored.restoredApartments);
+			routes.splice(0, routes.length, ...restored.restoredRoutes);
+			setDefaultChangesDirty(true, "JSON opened; save edits to keep these changes");
+			renderRouteLists();
+		} catch (error) {
+			defaultsSaveStatus.textContent = error instanceof Error ? error.message : "Could not open this JSON file.";
+			defaultsSaveStatus.classList.add("error");
+		}
+		defaultsJsonFile.value = "";
+	}
+
+	async function exportDefaultsJson() {
+		const contents = JSON.stringify(serializeDefaultData(), null, 2);
+		if (typeof window.showSaveFilePicker === "function") {
+			try {
+				const handle = await window.showSaveFilePicker({
+					suggestedName: "travels.json",
+					types: [{ description: "JSON files", accept: { "application/json": [".json"] } }],
+				});
+				const writable = await handle.createWritable();
+				await writable.write(contents);
+				await writable.close();
+			} catch (error) {
+				if (error?.name === "AbortError") return;
+				defaultsSaveStatus.textContent = "Could not export JSON";
+				defaultsSaveStatus.classList.add("error");
+				return;
+			}
+		} else {
+			const blob = new Blob([contents], { type: "application/json" });
+			const url = URL.createObjectURL(blob);
+			const link = document.createElement("a");
+			link.href = url;
+			link.download = "travels.json";
+			link.click();
+			URL.revokeObjectURL(url);
+		}
+		defaultsSaveStatus.textContent = hasUnsavedDefaultChanges
+			? "JSON exported; unsaved changes remain"
+			: "JSON exported";
+		defaultsSaveStatus.classList.remove("error");
 	}
 
 	function confirmDefaultsAction(title, message, confirmLabel, action) {
@@ -812,7 +914,8 @@
 		}
 	}
 
-	requireElement("define-default-routes").addEventListener("click", () => {
+	requireElement("define-default-routes").addEventListener("click", async () => {
+		await defaultsInitialization;
 		homeView.hidden = true;
 		tripView.hidden = true;
 		routesView.hidden = false;
@@ -821,10 +924,9 @@
 	});
 
 	requireElement("routes-back").addEventListener("click", () => {
-		const returnToLanding = () => {
+		const returnToLanding = async () => {
 			if (hasUnsavedDefaultChanges) {
-				loadSavedDefaults();
-				renderRouteLists();
+				await initializeDefaultData();
 			}
 			routesView.hidden = true;
 			homeView.hidden = false;
@@ -863,6 +965,12 @@
 		action?.();
 	});
 	defaultsConfirmDialog.addEventListener("cancel", (event) => event.preventDefault());
+	exportDefaultsButton.addEventListener("click", () => { void exportDefaultsJson(); });
+	openDefaultsButton.addEventListener("click", () => defaultsJsonFile.click());
+	defaultsJsonFile.addEventListener("change", () => {
+		const file = defaultsJsonFile.files?.[0];
+		if (file) void openDefaultsJson(file);
+	});
 
 	requireElement("add-route").addEventListener("click", () => {
 		openRouteEditor();
@@ -1206,8 +1314,7 @@
 	window.addEventListener("resize", () => {
 		if (!routesView.hidden) fitOverviewMap();
 	});
-	loadSavedDefaults();
-	renderRouteLists();
+	defaultsInitialization = initializeDefaultData();
 
 	function displayName(before, after, period) {
 		return period === "before" ? before : after;

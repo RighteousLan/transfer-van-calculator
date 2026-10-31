@@ -110,7 +110,7 @@
 							<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 12H5m6 6-6-6 6-6" /></svg>
 							Back
 						</button>
-						<button class="primary save-defaults-button" id="save-defaults" type="button" disabled>Save defaults</button>
+						<button class="primary save-defaults-button" id="save-defaults" type="button" disabled>Save edits</button>
 					</div>
 					<h1>Default routes</h1>
 					<p class="defaults-save-status" id="defaults-save-status" aria-live="polite">Saved defaults</p>
@@ -123,7 +123,7 @@
 					<ul class="collection-list" id="routes-list">
 						<li class="collection-empty">No routes yet</li>
 					</ul>
-					<button class="add-item-button" id="add-route" type="button">
+					<button class="add-item-button" id="add-route" type="button" disabled>
 						<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
 						Add route
 					</button>
@@ -144,6 +144,11 @@
 						<button class="batch-add-button" id="batch-add-apartments" type="button">Batch add</button>
 					</div>
 				</section>
+				<footer class="defaults-file-footer">
+					<button class="secondary" id="export-defaults" type="button">Export JSON</button>
+					<button class="secondary" id="open-defaults" type="button">Open JSON</button>
+					<input id="defaults-json-file" type="file" accept=".json,application/json" hidden>
+				</footer>
 			</div>
 			<section class="route-editor-view" id="route-editor-view" hidden aria-label="Edit route">
 				<header class="route-editor-header">

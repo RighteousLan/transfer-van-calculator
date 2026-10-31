@@ -4,15 +4,27 @@ dropoff and pickup areas probably not necesary.
 Move the batch add button to be nicer.
 Batching appartments with existing apartments should ask the user to pick between collisions.
 
+ROUTE EDITOR
 The Arrows are backwards in the add route list.
 Should I add the Edit apartment button to the route list?
 Add functionality to click apartments to add them to the route.
 Route should display visibly with lines from each apartment to the next in the list.
 Make the columns in the route editor more thin
 Display the reordered apartments better, right now it's annoying
+*Whenever an area is added to the route, it should be added as an additional STOP (1st stop, 2nd stop)
+*If I drag an area into another area, it should combine. Meaning that the apartment's inhabitants will be picked up from the other apartment
+
 
 Add a delete button to the existing route list, but it has an "are you sure?" popup
 
 
 Add pin button:
 Needs to say the name of the apartment you are placing
+
+Little search and filter buttons for the appartments list
+It is loading the defaults incorrectly right now. IF there is no cache, look in the JSON. IF there is not Json, just load the four.
+
+MODEL.JS
+Phone numbers should be on teaching areas, NOT on apartments (I think)
+*Routes should have a list of stops. a stop has a single primary apartment, and any number of secondary apartments
+*I don't think the apartments even need a pickup or dropoff list now.
