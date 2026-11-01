@@ -1,24 +1,17 @@
 In the default routes screen. Every instance that has the add pin button should  show coords and say edit pin if there already is a pin.
 The edit screen should show a list of phone numbers and a button to add or remove from the list. Same goes for areas.
--dropoff and pickup areas probably not necesary.
-Move the batch add button to be nicer.
+Move the batch add button to be nicer. (inside the menu of the Add button)
 Batching appartments with existing apartments should ask the user to pick between collisions.
 
 ROUTE EDITOR
 -The Arrows are backwards in the add route list.
 Should I add the Edit apartment button to the route list?
--Add functionality to click apartments to add them to the route.
--Route should display visibly with lines from each apartment to the next in the list.
 Make the columns in the route editor more thin
-Display the reordered apartments better, right now it's annoying
--*Whenever an area is added to the route, it should be added as an additional STOP (1st stop, 2nd stop)
-*If I drag an area into another area, it should combine. Meaning that the apartment's inhabitants will be picked up from the other apartment
-
+Right now you cannot reorder a secondary apartment
 
 Add a delete button to the existing route list, but it has an "are you sure?" popup
 
-
-Add pin button:
+Add pin menu:
 Needs to say the name of the apartment you are placing
 
 Little search and filter buttons for the appartments list
@@ -26,5 +19,11 @@ It is loading the defaults incorrectly right now. IF there is no cache, look in 
 
 MODEL.JS
 Phone numbers should be on teaching areas, NOT on apartments (I think)
--*Routes should have a list of stops. a stop has a single primary apartment, and any number of secondary apartments
--*I don't think the apartments even need a pickup or dropoff list now.
+
+
+
+Main.js ParseAssignment function ln1657
+Should also add an apartment to each missionary by trying to match based on area.
+Should also try to calculate the transfer type
+
+Afterward it needs to ask the user to select the depatring missionaries
