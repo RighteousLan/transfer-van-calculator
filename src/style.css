@@ -466,18 +466,50 @@ button svg, .upload-button svg { width: 17px; height: 17px; }
 	list-style: none;
 }
 
-.route-apartment-row, .available-apartment-row {
+.route-stop-row, .available-apartment-row {
 	display: flex;
 	min-height: 46px;
-	align-items: center;
-	gap: 5px;
+	flex-direction: column;
+	align-items: stretch;
 	padding: 5px 0;
 	border-bottom: 1px solid #e7ebe5;
 }
 
-.route-apartment-row.drag-target { border-top: 2px solid var(--green); }
+.route-stop-row.drag-target { border-top: 2px solid var(--green); }
 
-.route-apartment-row.is-dragging { opacity: 0.4; }
+.route-stop-row.merge-target {
+	border-color: var(--green);
+	border-radius: 4px;
+	background: var(--soft-green);
+}
+
+.route-stop-row.is-dragging { opacity: 0.4; }
+
+.route-stop-primary, .available-apartment-row {
+	display: flex;
+	min-width: 0;
+	flex-direction: row;
+	align-items: center;
+	gap: 5px;
+}
+
+.route-secondary-list {
+	margin: 3px 0 0 30px;
+	padding: 0 0 0 10px;
+	border-left: 1px solid #dfe5df;
+	list-style: none;
+}
+
+.route-secondary-row {
+	display: flex;
+	min-width: 0;
+	min-height: 34px;
+	align-items: center;
+	gap: 5px;
+	padding: 2px 0;
+}
+
+.route-secondary-row .route-apartment-name { color: var(--muted); font-size: 11px; }
 
 .route-apartment-name {
 	flex: 1;
@@ -1040,6 +1072,33 @@ button svg, .upload-button svg { width: 17px; height: 17px; }
 	place-items: center;
 }
 
+.route-lines-layer {
+	position: absolute;
+	inset: 0;
+	z-index: 1;
+	width: 100%;
+	height: 100%;
+	overflow: visible;
+	pointer-events: none;
+}
+
+.route-primary-line {
+	fill: none;
+	stroke: var(--green);
+	stroke-width: 3.5;
+	stroke-linecap: round;
+	stroke-opacity: 0.86;
+}
+
+.route-secondary-line {
+	fill: none;
+	stroke: var(--orange);
+	stroke-width: 2;
+	stroke-dasharray: 6 6;
+	stroke-linecap: round;
+	stroke-opacity: 0.58;
+}
+
 .map-pin {
 	position: absolute;
 	z-index: 2;
@@ -1118,6 +1177,15 @@ button.map-pin:not(:disabled):hover {
 }
 
 .pin-picking .map-pin { pointer-events: none; }
+
+.map-pin.map-drop-target {
+	transform: translate(-50%, -50%) scale(1.18);
+	outline: 3px solid var(--green);
+	outline-offset: 3px;
+	background: var(--soft-green);
+}
+
+.routes-view.map-apartment-dragging .map-viewport { cursor: grabbing; }
 
 .pin-pick-banner {
 	position: absolute;

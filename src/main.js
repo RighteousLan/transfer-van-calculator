@@ -78,8 +78,6 @@
 	const editApartmentAddress = requireElement("edit-apartment-address");
 	const editApartmentPhones = requireElement("edit-apartment-phones");
 	const editApartmentTeachingAreas = requireElement("edit-apartment-teaching-areas");
-	const editApartmentPickupAreas = requireElement("edit-apartment-pickup-areas");
-	const editApartmentDropoffAreas = requireElement("edit-apartment-dropoff-areas");
 	const batchApartmentDialog = requireElement("batch-apartment-dialog");
 	const batchApartmentForm = requireElement("batch-apartment-form");
 	const batchApartmentFile = requireElement("batch-apartment-file");
@@ -97,7 +95,10 @@
 	let pendingBatchApartments = [];
 	let editingRouteDraft = null;
 	let editingRouteIndex = null;
-	let draggedRouteApartment = null;
+	let draggedRouteStop = null;
+	let mapApartmentDrag = null;
+	const apartmentForMapPin = new WeakMap();
+	const suppressNextMapPinClick = new WeakSet();
 	let hasUnsavedDefaultChanges = false;
 	let defaultsConfirmationAction = null;
 	let defaultsInitialization = Promise.resolve();
@@ -192,8 +193,6 @@
 			phoneNumbers: [...apartment.phoneNumbers],
 			visualPin: apartment.visualPin ? { ...apartment.visualPin } : null,
 			teachingAreas: apartment.teachingAreas.map(serializeArea),
-			pickupAreas: apartment.pickupAreas.map(serializeArea),
-			dropoffAreas: apartment.dropoffAreas.map(serializeArea),
 		};
 	}
 
@@ -205,8 +204,6 @@
 		const pin = data?.visualPin;
 		apartment.visualPin = Number.isFinite(pin?.x) && Number.isFinite(pin?.y) ? { x: pin.x, y: pin.y } : null;
 		apartment.teachingAreas = Array.isArray(data?.teachingAreas) ? data.teachingAreas.map(restoreArea) : [];
-		apartment.pickupAreas = Array.isArray(data?.pickupAreas) ? data.pickupAreas.map(restoreArea) : [];
-		apartment.dropoffAreas = Array.isArray(data?.dropoffAreas) ? data.dropoffAreas.map(restoreArea) : [];
 		return apartment;
 	}
 
@@ -216,7 +213,10 @@
 			apartments: apartments.map(serializeApartment),
 			routes: routes.map((route) => ({
 				name: route.name,
-				apartmentIndexes: route.apartmentList.map((apartment) => apartments.indexOf(apartment)),
+				stops: route.stops.map((stop) => ({
+					primaryApartmentIndex: apartments.indexOf(stop.primaryApartment),
+					secondaryApartmentIndexes: stop.secondaryApartments.map((apartment) => apartments.indexOf(apartment)),
+				})),
 				travelTimes: route.travelTimeTable.map((row) => [...row]),
 			})),
 		};
@@ -232,13 +232,21 @@
 		const restoredRoutes = data.routes.map((routeData) => {
 			const route = new Route();
 			route.name = String(routeData?.name ?? "");
-			for (const apartmentIndex of routeData?.apartmentIndexes ?? []) {
-				const apartment = restoredApartments[apartmentIndex];
-				if (apartment) route.addApartment(apartment);
+			const stopRecords = Array.isArray(routeData?.stops)
+				? routeData.stops
+				: (routeData?.apartmentIndexes ?? []).map((apartmentIndex) => ({ primaryApartmentIndex: apartmentIndex }));
+			for (const stopData of stopRecords) {
+				const primaryApartment = restoredApartments[stopData?.primaryApartmentIndex ?? stopData?.apartmentIndex];
+				if (!primaryApartment) continue;
+				const stop = route.addStop(primaryApartment);
+				for (const apartmentIndex of stopData?.secondaryApartmentIndexes ?? []) {
+					const secondaryApartment = restoredApartments[apartmentIndex];
+					if (secondaryApartment) route.addSecondaryApartment(stop, secondaryApartment);
+				}
 			}
 			const storedTravelTimes = routeData?.travelTimes ?? [];
-			route.travelTimeTable = route.apartmentList.map((_, rowIndex) =>
-				route.apartmentList.map((_, columnIndex) => {
+			route.travelTimeTable = route.stops.map((_, rowIndex) =>
+				route.stops.map((_, columnIndex) => {
 					const time = storedTravelTimes[rowIndex]?.[columnIndex];
 					return typeof time === "number" && Number.isFinite(time) ? time : null;
 				}));
@@ -384,14 +392,26 @@
 				label.textContent = route.name || `Route ${index + 1}`;
 				const detail = document.createElement("span");
 				detail.className = "saved-route-detail";
-				detail.textContent = `${route.apartments.length} ${route.apartments.length === 1 ? "apartment" : "apartments"}`;
+				detail.textContent = `${route.stops.length} ${route.stops.length === 1 ? "stop" : "stops"}`;
+				item.tabIndex = 0;
+				item.setAttribute("role", "button");
+				item.addEventListener("click", () => openRouteEditor(index));
+				item.addEventListener("keydown", (event) => {
+					if (event.key === "Enter" || event.key === " ") {
+						event.preventDefault();
+						openRouteEditor(index);
+					}
+				});
 				const editButton = document.createElement("button");
 				editButton.className = "apartment-row-action";
 				editButton.type = "button";
 				editButton.setAttribute("aria-label", `Edit ${route.name || `Route ${index + 1}`}`);
 				editButton.title = "Edit route";
 				editButton.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 5 4 4M4 20l4-.8L19 8a2.1 2.1 0 0 0-3-3L5 16l-1 4Z" /></svg>';
-				editButton.addEventListener("click", () => openRouteEditor(index));
+				editButton.addEventListener("click", (event) => {
+					event.stopPropagation();
+					openRouteEditor(index);
+				});
 				item.append(label, detail, editButton);
 				routesList.append(item);
 			});
@@ -446,7 +466,10 @@
 	function cloneRoute(route) {
 		const draft = new Route();
 		draft.name = route.name || "";
-		for (const apartment of route.apartments) draft.addApartment(apartment);
+		for (const stop of route.stops) {
+			const clonedStop = draft.addStop(stop.primaryApartment);
+			for (const apartment of stop.secondaryApartments) draft.addSecondaryApartment(clonedStop, apartment);
+		}
 		draft.travelTimeTable = route.travelTimeTable.map((row) => [...row]);
 		return draft;
 	}
@@ -474,7 +497,8 @@
 	function closeRouteEditor() {
 		editingRouteDraft = null;
 		editingRouteIndex = null;
-		draggedRouteApartment = null;
+		draggedRouteStop = null;
+		mapApartmentDrag = null;
 		routeEditorView.hidden = true;
 		routeListView.hidden = false;
 		routesView.classList.remove("editing-route");
@@ -509,12 +533,16 @@
 		return button;
 	}
 
-	function reorderRouteApartments(fromIndex, toIndex) {
-		if (!editingRouteDraft || fromIndex === toIndex) return;
-		const originalOrder = [...editingRouteDraft.apartmentList];
-		const [movedApartment] = editingRouteDraft.apartmentList.splice(fromIndex, 1);
-		editingRouteDraft.apartmentList.splice(toIndex, 0, movedApartment);
-		const permutation = editingRouteDraft.apartmentList.map((apartment) => originalOrder.indexOf(apartment));
+	function reorderRouteStops(movedStop, insertionIndex) {
+		if (!editingRouteDraft) return;
+		const originalOrder = [...editingRouteDraft.stops];
+		const fromIndex = originalOrder.indexOf(movedStop);
+		if (fromIndex === -1) return;
+		const targetIndex = fromIndex < insertionIndex ? insertionIndex - 1 : insertionIndex;
+		if (targetIndex === fromIndex) return;
+		const [stop] = editingRouteDraft.stops.splice(fromIndex, 1);
+		editingRouteDraft.stops.splice(Math.max(0, Math.min(targetIndex, editingRouteDraft.stops.length)), 0, stop);
+		const permutation = editingRouteDraft.stops.map((stop) => originalOrder.indexOf(stop));
 		const oldTravelTimes = editingRouteDraft.travelTimeTable.map((row) => [...row]);
 		const reorderedTravelTimes = permutation.map((rowIndex) =>
 			permutation.map((columnIndex) => oldTravelTimes[rowIndex]?.[columnIndex] ?? null));
@@ -524,76 +552,126 @@
 
 	function removeApartmentFromDraft(apartment) {
 		if (!editingRouteDraft) return;
-		const index = editingRouteDraft.apartmentList.indexOf(apartment);
-		if (index === -1) return;
-		editingRouteDraft.apartmentList.splice(index, 1);
-		editingRouteDraft.travelTimeTable.splice(index, 1);
-		for (const row of editingRouteDraft.travelTimeTable) row.splice(index, 1);
+		editingRouteDraft.removeApartment(apartment);
 		renderRouteEditor();
 	}
 
 	function addApartmentToDraft(apartment) {
-		if (!editingRouteDraft || editingRouteDraft.apartmentList.includes(apartment)) return;
-		editingRouteDraft.addApartment(apartment);
+		if (!editingRouteDraft || editingRouteDraft.apartments.includes(apartment)) return;
+		editingRouteDraft.addStop(apartment);
+		renderRouteEditor();
+	}
+
+	function moveApartmentToRouteEnd(apartment) {
+		if (!editingRouteDraft) return;
+		const currentStop = editingRouteDraft.stops.find((stop) => stop.apartments.includes(apartment));
+		if (!currentStop) {
+			addApartmentToDraft(apartment);
+			return;
+		}
+		if (currentStop.primaryApartment === apartment && currentStop.secondaryApartments.length === 0) {
+			reorderRouteStops(currentStop, editingRouteDraft.stops.length);
+		} else {
+			editingRouteDraft.removeApartment(apartment);
+			editingRouteDraft.addStop(apartment);
+		}
 		renderRouteEditor();
 	}
 
 	function renderRouteEditor() {
 		if (!editingRouteDraft) return;
+		renderMapPins();
 		routeDraftList.replaceChildren();
-		routeDraftCount.textContent = String(editingRouteDraft.apartments.length);
-		if (editingRouteDraft.apartments.length === 0) {
+		routeDraftCount.textContent = String(editingRouteDraft.stops.length);
+		if (editingRouteDraft.stops.length === 0) {
 			const empty = document.createElement("li");
 			empty.className = "collection-empty route-empty";
 			empty.textContent = "Add apartments from the list.";
 			routeDraftList.append(empty);
 		} else {
-			editingRouteDraft.apartments.forEach((apartment, index) => {
-				const row = document.createElement("li");
-				row.className = "route-apartment-row";
-				row.addEventListener("dragover", (event) => {
-					if (draggedRouteApartment === null) return;
+			editingRouteDraft.stops.forEach((stop, index) => {
+				const stopRow = document.createElement("li");
+				stopRow.className = "route-stop-row";
+				stopRow.addEventListener("dragover", (event) => {
+					if (!draggedRouteStop) return;
 					event.preventDefault();
-					row.classList.add("drag-target");
+					const droppingOnApartment = event.target instanceof Element
+						&& event.target.closest(".route-stop-primary, .route-secondary-row");
+					stopRow.classList.toggle("merge-target", Boolean(droppingOnApartment && draggedRouteStop !== stop));
+					stopRow.classList.toggle("drag-target", !droppingOnApartment);
 				});
-				row.addEventListener("dragleave", () => row.classList.remove("drag-target"));
-				row.addEventListener("drop", (event) => {
+				stopRow.addEventListener("dragleave", () => stopRow.classList.remove("drag-target", "merge-target"));
+				stopRow.addEventListener("drop", (event) => {
+					if (!draggedRouteStop) return;
 					event.preventDefault();
-					row.classList.remove("drag-target");
-					if (draggedRouteApartment !== null) reorderRouteApartments(draggedRouteApartment, index);
-					draggedRouteApartment = null;
+					stopRow.classList.remove("drag-target", "merge-target");
+					const sourceStop = draggedRouteStop;
+					draggedRouteStop = null;
+					const droppingOnApartment = event.target instanceof Element
+						&& event.target.closest(".route-stop-primary, .route-secondary-row");
+					if (droppingOnApartment && sourceStop !== stop) editingRouteDraft.mergeStops(sourceStop, stop);
+					else {
+						const bounds = stopRow.getBoundingClientRect();
+						const insertionIndex = event.clientY < bounds.top + bounds.height / 2 ? index : index + 1;
+						reorderRouteStops(sourceStop, insertionIndex);
+					}
+					renderRouteEditor();
 				});
 
+				const primaryRow = document.createElement("div");
+				primaryRow.className = "route-stop-primary";
 				const handle = document.createElement("button");
 				handle.className = "route-reorder-handle";
 				handle.type = "button";
 				handle.draggable = true;
-				handle.setAttribute("aria-label", `Reorder ${apartment.name || `apartment ${index + 1}`}`);
-				handle.title = "Drag to reorder";
+				handle.setAttribute("aria-label", `Reorder stop ${index + 1}`);
+				handle.title = "Drag to reorder or drop on an apartment to combine stops";
 				handle.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M7 6h10M7 12h10M7 18h10" /></svg>';
 				handle.addEventListener("dragstart", (event) => {
-					draggedRouteApartment = index;
-					row.classList.add("is-dragging");
+					draggedRouteStop = stop;
+					stopRow.classList.add("is-dragging");
 					if (event.dataTransfer) {
 						event.dataTransfer.effectAllowed = "move";
 						event.dataTransfer.setData("text/plain", String(index));
 					}
 				});
 				handle.addEventListener("dragend", () => {
-					draggedRouteApartment = null;
+					draggedRouteStop = null;
 					renderRouteEditor();
 				});
 
+				const primaryApartment = stop.primaryApartment;
 				const name = document.createElement("span");
 				name.className = "route-apartment-name";
-				name.textContent = apartment.name || apartment.address || `Apartment ${index + 1}`;
+				name.textContent = primaryApartment?.name || primaryApartment?.address || `Stop ${index + 1}`;
 				const actions = document.createElement("div");
 				actions.className = "route-apartment-actions";
-				const pinButton = createApartmentPinButton(apartment);
+				const pinButton = createApartmentPinButton(primaryApartment);
 				if (pinButton) actions.append(pinButton);
-				actions.append(createMoveButton(apartment.name || "apartment", "from-route", () => removeApartmentFromDraft(apartment)));
-				row.append(handle, name, actions);
-				routeDraftList.append(row);
+				actions.append(createMoveButton(primaryApartment?.name || "apartment", "from-route", () => removeApartmentFromDraft(primaryApartment)));
+				primaryRow.append(handle, name, actions);
+				stopRow.append(primaryRow);
+
+				if (stop.secondaryApartments.length > 0) {
+					const secondaryList = document.createElement("ul");
+					secondaryList.className = "route-secondary-list";
+					for (const secondaryApartment of stop.secondaryApartments) {
+						const secondaryRow = document.createElement("li");
+						secondaryRow.className = "route-secondary-row";
+						const secondaryName = document.createElement("span");
+						secondaryName.className = "route-apartment-name";
+						secondaryName.textContent = secondaryApartment.name || secondaryApartment.address || "Secondary apartment";
+						const secondaryActions = document.createElement("div");
+						secondaryActions.className = "route-apartment-actions";
+						const secondaryPin = createApartmentPinButton(secondaryApartment);
+						if (secondaryPin) secondaryActions.append(secondaryPin);
+						secondaryActions.append(createMoveButton(secondaryApartment.name || "apartment", "from-route", () => removeApartmentFromDraft(secondaryApartment)));
+						secondaryRow.append(secondaryName, secondaryActions);
+						secondaryList.append(secondaryRow);
+					}
+					stopRow.append(secondaryList);
+				}
+				routeDraftList.append(stopRow);
 			});
 		}
 
@@ -656,8 +734,6 @@
 		editApartmentAddress.value = apartment.address;
 		editApartmentPhones.value = apartment.phoneNumbers.join("\n");
 		editApartmentTeachingAreas.value = apartmentAreaText(apartment.teachingAreas);
-		editApartmentPickupAreas.value = apartmentAreaText(apartment.pickupAreas);
-		editApartmentDropoffAreas.value = apartmentAreaText(apartment.dropoffAreas);
 		editApartmentVisualPin = apartment.visualPin;
 		updateNameInputState(editApartmentName, isDuplicateApartmentName(apartment.name, apartment));
 		editApartmentDialog.showModal();
@@ -668,13 +744,7 @@
 		const index = apartments.indexOf(apartment);
 		if (index === -1) return;
 		apartments.splice(index, 1);
-		for (const route of routes) {
-			const apartmentIndex = route.apartmentList.indexOf(apartment);
-			if (apartmentIndex === -1) continue;
-			route.apartmentList.splice(apartmentIndex, 1);
-			route.travelTimeTable.splice(apartmentIndex, 1);
-			for (const row of route.travelTimeTable) row.splice(apartmentIndex, 1);
-		}
+		for (const route of routes) route.removeApartment(apartment);
 		renderRouteLists();
 		setDefaultChangesDirty(true);
 	}
@@ -962,7 +1032,7 @@
 		const action = defaultsConfirmationAction;
 		defaultsConfirmationAction = null;
 		defaultsConfirmDialog.close();
-		action?.();
+		void action?.();
 	});
 	defaultsConfirmDialog.addEventListener("cancel", (event) => event.preventDefault());
 	exportDefaultsButton.addEventListener("click", () => { void exportDefaultsJson(); });
@@ -1040,8 +1110,6 @@
 		editingApartment.address = editApartmentAddress.value.trim();
 		editingApartment.phoneNumbers = mergeUniqueStrings([], splitCellValues(editApartmentPhones.value));
 		editingApartment.teachingAreas = mergeUniqueAreas([], splitCellValues(editApartmentTeachingAreas.value));
-		editingApartment.pickupAreas = mergeUniqueAreas([], splitCellValues(editApartmentPickupAreas.value));
-		editingApartment.dropoffAreas = mergeUniqueAreas([], splitCellValues(editApartmentDropoffAreas.value));
 		editingApartment.visualPin = editApartmentVisualPin;
 
 		renderRouteLists();
@@ -1154,9 +1222,58 @@
 		});
 	}
 
+	function startMapApartmentDrag(event, marker, apartment) {
+		if (!editingRouteDraft || event.button !== 0) return;
+		mapApartmentDrag = {
+			apartment,
+			marker,
+			pointerId: event.pointerId,
+			startX: event.clientX,
+			startY: event.clientY,
+			moved: false,
+			targetMarker: null,
+		};
+		marker.setPointerCapture(event.pointerId);
+	}
+
+	function updateMapApartmentDrag(event) {
+		if (!mapApartmentDrag || event.pointerId !== mapApartmentDrag.pointerId) return;
+		if (Math.hypot(event.clientX - mapApartmentDrag.startX, event.clientY - mapApartmentDrag.startY) > 5) {
+			mapApartmentDrag.moved = true;
+		}
+		if (!mapApartmentDrag.moved) return;
+		event.preventDefault();
+		routesView.classList.add("map-apartment-dragging");
+		const element = document.elementFromPoint(event.clientX, event.clientY);
+		const nextTarget = element instanceof Element ? element.closest(".map-pin") : null;
+		if (mapApartmentDrag.targetMarker !== nextTarget) {
+			mapApartmentDrag.targetMarker?.classList.remove("map-drop-target");
+			mapApartmentDrag.targetMarker = nextTarget;
+			nextTarget?.classList.add("map-drop-target");
+		}
+	}
+
+	function finishMapApartmentDrag(event) {
+		if (!mapApartmentDrag || event.pointerId !== mapApartmentDrag.pointerId) return;
+		const drag = mapApartmentDrag;
+		mapApartmentDrag = null;
+		routesView.classList.remove("map-apartment-dragging");
+		drag.targetMarker?.classList.remove("map-drop-target");
+		if (!drag.moved) return;
+
+		suppressNextMapPinClick.add(drag.marker);
+		const targetElement = document.elementFromPoint(event.clientX, event.clientY);
+		const targetMarker = targetElement instanceof Element ? targetElement.closest(".map-pin") : null;
+		const targetApartment = targetMarker ? apartmentForMapPin.get(targetMarker) : null;
+		if (!targetApartment || targetApartment === drag.apartment) return;
+		if (editingRouteDraft.moveApartmentToStop(drag.apartment, targetApartment)) renderRouteEditor();
+	}
+
 	function renderMapPins() {
 		mapStage.querySelectorAll(".map-pin").forEach((marker) => marker.remove());
+		mapStage.querySelectorAll(".route-lines-layer").forEach((layer) => layer.remove());
 		if (!overviewMap.naturalWidth || !mapScale) return;
+		renderRouteMap();
 
 		const pendingAddressKeys = new Set(pendingBatchApartments.map(({ key }) => key));
 		const savedPins = apartments
@@ -1180,6 +1297,7 @@
 			const marker = document.createElement("button");
 			marker.className = "map-pin";
 			marker.type = "button";
+			apartmentForMapPin.set(marker, apartment);
 			const apartmentLabel = apartment.name || apartment.address || "Apartment";
 			marker.setAttribute("aria-label", `Apartment pin: ${apartmentLabel}`);
 			marker.style.left = `${imageOffsetX + visualPin.x * mapScale}px`;
@@ -1189,8 +1307,56 @@
 			label.className = "map-pin-label";
 			label.textContent = apartmentLabel;
 			marker.append(label);
+			marker.addEventListener("click", () => {
+				if (suppressNextMapPinClick.has(marker)) {
+					suppressNextMapPinClick.delete(marker);
+					return;
+				}
+				if (editingRouteDraft && apartments.includes(apartment)) moveApartmentToRouteEnd(apartment);
+			});
+			marker.addEventListener("pointerdown", (event) => startMapApartmentDrag(event, marker, apartment));
+			marker.addEventListener("pointermove", updateMapApartmentDrag);
+			marker.addEventListener("pointerup", finishMapApartmentDrag);
+			marker.addEventListener("pointercancel", finishMapApartmentDrag);
 			mapStage.append(marker);
 		}
+	}
+
+	function renderRouteMap() {
+		if (!editingRouteDraft || editingRouteDraft.stops.length === 0) return;
+		const namespace = "http://www.w3.org/2000/svg";
+		const overlay = document.createElementNS(namespace, "svg");
+		overlay.classList.add("route-lines-layer");
+		overlay.setAttribute("viewBox", `0 0 ${mapStage.clientWidth} ${mapStage.clientHeight}`);
+		overlay.setAttribute("aria-hidden", "true");
+		const imageOffsetX = (mapStage.clientWidth - overviewMap.naturalWidth * mapScale) / 2;
+		const imageOffsetY = (mapStage.clientHeight - overviewMap.naturalHeight * mapScale) / 2;
+		const pointFor = (apartment) => apartment?.visualPin ? {
+			x: imageOffsetX + apartment.visualPin.x * mapScale,
+			y: imageOffsetY + apartment.visualPin.y * mapScale,
+		} : null;
+		const addLine = (start, end, secondary = false) => {
+			if (!start || !end) return;
+			const line = document.createElementNS(namespace, "line");
+			line.setAttribute("x1", String(start.x));
+			line.setAttribute("y1", String(start.y));
+			line.setAttribute("x2", String(end.x));
+			line.setAttribute("y2", String(end.y));
+			line.setAttribute("class", secondary ? "route-secondary-line" : "route-primary-line");
+			overlay.append(line);
+		};
+
+		for (let index = 0; index < editingRouteDraft.stops.length - 1; index += 1) {
+			addLine(
+				pointFor(editingRouteDraft.stops[index].primaryApartment),
+				pointFor(editingRouteDraft.stops[index + 1].primaryApartment),
+			);
+		}
+		for (const stop of editingRouteDraft.stops) {
+			const primaryPoint = pointFor(stop.primaryApartment);
+			for (const apartment of stop.secondaryApartments) addLine(primaryPoint, pointFor(apartment), true);
+		}
+		mapStage.append(overlay);
 	}
 
 	function getVisualPinAtPoint(clientX, clientY) {
@@ -1347,8 +1513,6 @@
 			`Phone numbers: ${apartment.phoneNumbers.join(", ") || "None"}`,
 			`Visual pin: ${pin}`,
 			`Teaching areas: ${formatAreas(apartment.teachingAreas)}`,
-			`Pickup areas: ${formatAreas(apartment.pickupAreas)}`,
-			`Dropoff areas: ${formatAreas(apartment.dropoffAreas)}`,
 		].join("\n");
 	}
 

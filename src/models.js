@@ -30,8 +30,6 @@
 		phoneNumbers = [];
 		visualPin = null;
 		teachingAreas = [];
-		pickupAreas = [];
-		dropoffAreas = [];
 	}
 
 	class Area {
@@ -73,28 +71,101 @@
 		districts = [];
 	}
 
+	class Stop {
+		primaryApartment = null;
+		secondaryApartments = [];
+
+		constructor(primaryApartment = null) {
+			this.primaryApartment = primaryApartment;
+		}
+
+		get apartments() {
+			return [this.primaryApartment, ...this.secondaryApartments].filter(Boolean);
+		}
+
+		addSecondaryApartment(apartment) {
+			if (this.apartments.includes(apartment)) return false;
+			this.secondaryApartments.push(apartment);
+			return true;
+		}
+	}
+
 	class Route {
 		name = "";
-		apartmentList = [];
+		stops = [];
 		travelTimeTable = [];
 
 		get apartments() {
-			return this.apartmentList;
+			return this.stops.flatMap((stop) => stop.apartments);
 		}
 
 		get travelTimes() {
 			return this.travelTimeTable;
 		}
 
-		addApartment(apartment) {
-			if (this.apartmentList.includes(apartment)) {
+		addStop(apartment) {
+			if (this.apartments.includes(apartment)) {
 				throw new Error("This apartment is already on the route.");
 			}
 
-			const newSize = this.apartmentList.length + 1;
+			const newSize = this.stops.length + 1;
 			for (const row of this.travelTimeTable) row.push(null);
 			this.travelTimeTable.push(Array.from({ length: newSize }, () => null));
-			this.apartmentList.push(apartment);
+			const stop = new Stop(apartment);
+			this.stops.push(stop);
+			return stop;
+		}
+
+		addApartment(apartment) {
+			return this.addStop(apartment);
+		}
+
+		addSecondaryApartment(stop, apartment) {
+			if (!this.stops.includes(stop) || this.apartments.includes(apartment)) return false;
+			return stop.addSecondaryApartment(apartment);
+		}
+
+		moveApartmentToStop(apartment, targetApartment) {
+			if (apartment === targetApartment) return false;
+			let targetStop = this.stops.find((stop) => stop.apartments.includes(targetApartment));
+			if (!targetStop) targetStop = this.addStop(targetApartment);
+
+			const sourceStop = this.stops.find((stop) => stop.apartments.includes(apartment));
+			if (!sourceStop) return targetStop.addSecondaryApartment(apartment);
+			if (sourceStop === targetStop) return false;
+
+			this.removeApartment(apartment);
+			return targetStop.addSecondaryApartment(apartment);
+		}
+
+		mergeStops(sourceStop, targetStop) {
+			const sourceIndex = this.stops.indexOf(sourceStop);
+			if (sourceIndex === -1 || !this.stops.includes(targetStop) || sourceStop === targetStop) return false;
+
+			for (const apartment of sourceStop.apartments) targetStop.addSecondaryApartment(apartment);
+			this.stops.splice(sourceIndex, 1);
+			this.travelTimeTable.splice(sourceIndex, 1);
+			for (const row of this.travelTimeTable) row.splice(sourceIndex, 1);
+			return true;
+		}
+
+		removeApartment(apartment) {
+			const stopIndex = this.stops.findIndex((stop) => stop.primaryApartment === apartment);
+			if (stopIndex !== -1) {
+				const stop = this.stops[stopIndex];
+				if (stop.secondaryApartments.length > 0) {
+					stop.primaryApartment = stop.secondaryApartments.shift();
+				} else {
+					this.stops.splice(stopIndex, 1);
+					this.travelTimeTable.splice(stopIndex, 1);
+					for (const row of this.travelTimeTable) row.splice(stopIndex, 1);
+				}
+				return true;
+			}
+			const parentStop = this.stops.find((stop) => stop.secondaryApartments.includes(apartment));
+			if (!parentStop) return false;
+			parentStop.secondaryApartments.splice(parentStop.secondaryApartments.indexOf(apartment), 1);
+			return true;
 		}
 
 		setTravelTime(from, to, minutes) {
@@ -108,11 +179,11 @@
 		nextStop(currentLoc, dir) {
 			const currentIndex = this.indexOfApartment(currentLoc);
 			const offset = dir === Direction.North ? 1 : -1;
-			return this.apartmentList[currentIndex + offset] ?? null;
+			return this.stops[currentIndex + offset]?.primaryApartment ?? null;
 		}
 
 		indexOfApartment(apartment) {
-			const index = this.apartmentList.indexOf(apartment);
+			const index = this.stops.findIndex((stop) => stop.apartments.includes(apartment));
 			if (index === -1) throw new Error("Apartment is not on this route.");
 			return index;
 		}
@@ -139,6 +210,7 @@
 		Area,
 		District,
 		Zone,
+		Stop,
 		Route,
 		Missionary,
 	};
