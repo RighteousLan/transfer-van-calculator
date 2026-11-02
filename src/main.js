@@ -1784,6 +1784,9 @@
 			if (period === "before") {
 				missionary.areaBefore = area;
 				missionary.positionBefore = assignment.position;
+				const areaKey = normalize(assignment.area);
+				missionary.currentLoc = apartments.find((apartment) => apartment.teachingAreas.some((teachingArea) =>
+					normalize(teachingArea.nameBefore) === areaKey || normalize(teachingArea.nameAfter) === areaKey)) ?? null;
 			} else {
 				missionary.areaAfter = area;
 				missionary.positionAfter = assignment.position;
