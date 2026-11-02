@@ -5,6 +5,7 @@
 		District,
 		Missionary,
 		MissionaryType,
+		TransferType,
 		Route,
 		Zone,
 	} = window.TransferVanModels;
@@ -1594,7 +1595,7 @@
 				areaList.className = "area-list";
 				for (const area of district.areas) {
 					const item = document.createElement("li");
-					item.textContent = `Area: ${displayChangedName(area.nameBefore, area.nameAfter)}`;
+					item.textContent = `Area[${area.index}]: ${displayChangedName(area.nameBefore, area.nameAfter)}`;
 					areaList.append(item);
 				}
 				if (district.areas.length === 0) {
@@ -1738,13 +1739,67 @@
 
 	function findOrCreateArea(district, name, period) {
 		let area = district.areas.find((candidate) => candidate.nameBefore === name || candidate.nameAfter === name);
-		if (!area) area = new Area(district);
+		if (!area) {
+			let index = findIndex(name);
+			area = new Area(district, index);
+		}
 		assignName(area, period, name);
 		return area;
 	}
 
+	function findIndex(name) {
+		const areaKey = normalize(name);
+		const findRouteIndex = (routeName, direction) => {
+			const route = routes.find((candidate) => normalize(candidate.name) === normalize(routeName));
+			if (!route) return null;
+
+			for (const [stopIndex, stop] of route.stops.entries()) {
+				const hasArea = stop.apartments.some((apartment) => apartment.teachingAreas.some((area) =>
+					normalize(area.nameBefore) === areaKey || normalize(area.nameAfter) === areaKey));
+				if (hasArea) return stopIndex * direction;
+			}
+			return null;
+		};
+
+		return findRouteIndex("Duma to North", 1)
+			?? findRouteIndex("Duma to South", -1)
+			?? 0;
+	}
+
 	function identityKey(firstName, lastName) {
 		return `${normalize(firstName)}|${normalize(lastName)}`;
+	}
+
+	function calculateTransferType(missionary) {
+		const beforeArea = missionary.areaBefore;
+		const afterArea = missionary.areaAfter;
+		if (!afterArea) return null;
+
+		const beforeIndex = beforeArea?.index ?? 0;
+		const afterIndex = afterArea.index;
+		if (beforeArea === afterArea) return TransferType.STA;
+		if (beforeIndex === afterIndex) return TransferType.TWV;
+
+		if (beforeIndex > 0) {
+			if (afterIndex > beforeIndex) return TransferType.NTM;
+			if (afterIndex > 0) return TransferType.NTL;
+			if (afterIndex < 0) return TransferType.NTS;
+			if (afterIndex === 0) return TransferType.NTD;
+		}
+
+		if (beforeIndex < 0) {
+			if (afterIndex < beforeIndex) return TransferType.STM;
+			if (afterIndex < 0) return TransferType.STL;
+			if (afterIndex > 0) return TransferType.STN;
+			if (afterIndex === 0) return TransferType.STD;
+		}
+
+		if (beforeIndex === 0) {
+			if (afterIndex > 0) return TransferType.DTN;
+			if (afterIndex < 0) return TransferType.DTS;
+		}
+
+		return null;
 	}
 
 	function applyAssignments(assignments, period) {
@@ -1790,6 +1845,7 @@
 			} else {
 				missionary.areaAfter = area;
 				missionary.positionAfter = assignment.position;
+				missionary.transferType = calculateTransferType(missionary);
 			}
 		}
 

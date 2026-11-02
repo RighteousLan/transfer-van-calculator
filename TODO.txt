@@ -23,7 +23,13 @@ Phone numbers should be on teaching areas, NOT on apartments (I think)
 
 
 Main.js ParseAssignment function ln1657
-Should also add an apartment to each missionary by trying to match based on area.
-Should also try to calculate the transfer type
+Does not detect trainers
+Does not calculate correctly if trainee stays in duma (Dapat TWV) (sorta fixed ln1781)
+Does not calculate correctly if it does not find an apartment in the travel plan. This error should alert the user.
 
 Afterward it needs to ask the user to select the depatring missionaries
+
+
+
+Add an inforgraphic at the beginning about how to download the data.
+Add a warning at the end begging the APs to at least confirm the list of people who are transfering because it can calculate false positives.

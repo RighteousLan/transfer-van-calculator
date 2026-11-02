@@ -12,16 +12,20 @@
 	});
 
 	const TransferType = Object.freeze({
-		STA: "Stay",
-		TWV: "Transfer without Van",
-		NTM: "North to more North",
-		NTL: "North to Less North",
-		NTS: "North to South",
-		STM: "South to more South",
-		STL: "South to less South",
-		STN: "South to North",
-		ULI: "home",
-		NEW: "Trainee",
+		STA: "Stay",				 //Same area before and after transfer
+		TWV: "Transfer without Van", //Same apartment index, no van needed, just a transfer
+		NTM: "North to more North",  //Only rides the afternoon van going north
+		NTL: "North to Less North",	 //Only rides the morning van going south, does not reach duma
+		NTS: "North to South",		 //morning van going south, duma, afternoon south
+		NTD: "North to Duma",		 //morning van going south, duma
+		STM: "South to more South",  //afternoon van going south
+		STL: "South to less South",  //morning van going north
+		STN: "South to North",		 //morning van going north, duma, afternoon north
+		STD: "South to Duma",		 //morning van going south, duma
+		DTN: "Duma to North",		 //start index 0, afternoon van going north
+		DTS: "Duma to South",		 //start index 0, afternoon van going south
+		ULI: "home",				 //already gone
+		//NEW: "Trainee",
 	});
 
 	class Apartment {
@@ -35,9 +39,11 @@
 	class Area {
 		nameBefore = "";
 		nameAfter = "";
+		index = 0;
 
-		constructor(district) {
+		constructor(district, index = 0) {
 			this.parentDistrict = district;
+			this.index = index;
 			district.areas.push(this);
 		}
 
