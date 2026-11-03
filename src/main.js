@@ -1763,7 +1763,7 @@
 
 		return findRouteIndex("Duma to North", 1)
 			?? findRouteIndex("Duma to South", -1)
-			?? 0;
+			?? null;
 	}
 
 	function identityKey(firstName, lastName) {
@@ -1773,7 +1773,7 @@
 	function calculateTransferType(missionary) {
 		const beforeArea = missionary.areaBefore;
 		const afterArea = missionary.areaAfter;
-		if (!afterArea) return null;
+		if (!afterArea || afterArea.index === null || (beforeArea && beforeArea.index === null)) return null;
 
 		const beforeIndex = beforeArea?.index ?? 0;
 		const afterIndex = afterArea.index;

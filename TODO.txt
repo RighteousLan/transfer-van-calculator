@@ -24,8 +24,7 @@ Phone numbers should be on teaching areas, NOT on apartments (I think)
 
 Main.js ParseAssignment function ln1657
 Does not detect trainers
-Does not calculate correctly if trainee stays in duma (Dapat TWV) (sorta fixed ln1781)
-Does not calculate correctly if it does not find an apartment in the travel plan. This error should alert the user.
+Does not calculate correctly if it does not find an apartment in the travel plan. (IT DOES NOW, It sets to null, but...) This error should alert the user.
 
 Afterward it needs to ask the user to select the depatring missionaries
 
