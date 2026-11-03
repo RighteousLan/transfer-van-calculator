@@ -14,9 +14,9 @@
 	const TransferType = Object.freeze({
 		STA: "Stay",				 //Same area before and after transfer
 		TWV: "Transfer without Van", //Same apartment index, no van needed, just a transfer
-		NTM: "North to more North",  //Only rides the afternoon van going north
-		NTL: "North to Less North",	 //Only rides the morning van going south, does not reach duma
-		NTS: "North to South",		 //morning van going south, duma, afternoon south
+		NTM: "North to more North",  //afternoon van going north
+		NTL: "North to Less North",	 //morning van going south, does not reach duma
+		NTS: "North to South",		 //morning van going south, duma, afternoon van south
 		NTD: "North to Duma",		 //morning van going south, duma
 		STM: "South to more South",  //afternoon van going south
 		STL: "South to less South",  //morning van going north
