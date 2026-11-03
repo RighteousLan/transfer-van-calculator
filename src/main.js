@@ -23,6 +23,8 @@
 
 	const homeView = requireElement("home-view");
 	const tripView = requireElement("trip-view");
+	const nextView = requireElement("next-view");
+	const nextScreenButton = requireElement("next-screen");
 	const routesView = requireElement("routes-view");
 	const routeListView = requireElement("route-list-view");
 	const routeEditorView = requireElement("route-editor-view");
@@ -138,12 +140,27 @@
 	requireElement("new-trip").addEventListener("click", () => {
 		homeView.hidden = true;
 		tripView.hidden = false;
+		nextView.hidden = true;
 		window.scrollTo(0, 0);
 	});
 
 	requireElement("back-to-home").addEventListener("click", () => {
 		tripView.hidden = true;
+		nextView.hidden = true;
 		homeView.hidden = false;
+		window.scrollTo(0, 0);
+	});
+
+	nextScreenButton.addEventListener("click", () => {
+		if (nextScreenButton.disabled) return;
+		tripView.hidden = true;
+		nextView.hidden = false;
+		window.scrollTo(0, 0);
+	});
+
+	requireElement("back-to-trip").addEventListener("click", () => {
+		nextView.hidden = true;
+		tripView.hidden = false;
 		window.scrollTo(0, 0);
 	});
 
@@ -1731,6 +1748,13 @@
 			departingSelectionConfirmed ? `${departingCount} departing missionaries` : "Select departing missionaries",
 			!hasAfterBoard ? "none" : (departingSelectionConfirmed ? "complete" : "warning"),
 			!hasAfterBoard,
+		);
+		nextScreenButton.disabled = !(
+			hasBeforeBoard
+			&& unindexedCount === 0
+			&& boardsReady
+			&& missingTransferTypes === 0
+			&& departingSelectionConfirmed
 		);
 	}
 

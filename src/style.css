@@ -152,6 +152,16 @@ button svg, .upload-button svg { width: 17px; height: 17px; }
 
 .trip-back { margin-bottom: 28px; }
 
+.trip-navigation {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+	margin-bottom: 28px;
+}
+
+.trip-navigation .trip-back { margin-bottom: 0; }
+
 .section-label {
 	margin: 40px 0 14px;
 	color: var(--muted);
