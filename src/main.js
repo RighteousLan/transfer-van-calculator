@@ -48,6 +48,19 @@
 	const defaultsJsonFile = requireElement("defaults-json-file");
 	const missionaryOutput = requireElement("missionary-output");
 	const zoneOutput = requireElement("zone-output");
+	const unindexedAreasButton = requireElement("unindexed-areas-button");
+	const missingTransferTypesButton = requireElement("missing-transfer-types-button");
+	const departingMissionariesButton = requireElement("departing-missionaries-button");
+	const unindexedAreasDialog = requireElement("unindexed-areas-dialog");
+	const unindexedAreasList = requireElement("unindexed-areas-list");
+	const reindexUnindexedAreasButton = requireElement("reindex-unindexed-areas");
+	const missingTransferTypesDialog = requireElement("missing-transfer-types-dialog");
+	const missingTransferTypesList = requireElement("missing-transfer-types-list");
+	const recalculateMissingTransferTypesButton = requireElement("recalculate-missing-transfer-types");
+	const departingMissionariesDialog = requireElement("departing-missionaries-dialog");
+	const departingMissionariesForm = requireElement("departing-missionaries-form");
+	const departingMissionarySearch = requireElement("departing-missionary-search");
+	const departingMissionariesList = requireElement("departing-missionaries-list");
 	const dataSummary = requireElement("data-summary");
 	const missionaryCount = requireElement("missionary-count");
 	const zoneCount = requireElement("zone-count");
@@ -94,6 +107,13 @@
 	let minimumMapScale = 0;
 	let mapScale = 0;
 	let pendingBatchApartments = [];
+	const unindexedAreas = new Set();
+	const ignoredUnindexedAreas = new Set();
+	const ignoredTransferTypeMissionaries = new Set();
+	let hasBeforeBoard = false;
+	let hasAfterBoard = false;
+	let departingSelectionConfirmed = false;
+	let departingSelection = new Map();
 	let editingRouteDraft = null;
 	let editingRouteIndex = null;
 	let draggedRouteStop = null;
@@ -1481,6 +1501,33 @@
 	window.addEventListener("resize", () => {
 		if (!routesView.hidden) fitOverviewMap();
 	});
+	unindexedAreasButton.addEventListener("click", () => {
+		renderUnindexedAreas();
+		unindexedAreasDialog.showModal();
+	});
+	reindexUnindexedAreasButton.addEventListener("click", reindexUnindexedAreas);
+	requireElement("close-unindexed-areas").addEventListener("click", () => unindexedAreasDialog.close());
+	missingTransferTypesButton.addEventListener("click", () => {
+		renderMissingTransferTypes();
+		missingTransferTypesDialog.showModal();
+	});
+	recalculateMissingTransferTypesButton.addEventListener("click", recalculateMissingTransferTypes);
+	requireElement("close-missing-transfer-types").addEventListener("click", () => missingTransferTypesDialog.close());
+	departingMissionariesButton.addEventListener("click", openDepartingMissionariesDialog);
+	departingMissionarySearch.addEventListener("input", renderDepartingMissionaries);
+	requireElement("cancel-departing-missionaries").addEventListener("click", () => departingMissionariesDialog.close());
+	departingMissionariesForm.addEventListener("submit", (event) => {
+		event.preventDefault();
+		for (const missionary of missionaries) {
+			if (missionary.transferType === TransferType.ULI) missionary.transferType = calculateTransferType(missionary);
+		}
+		for (const [missionary, isDeparting] of departingSelection) {
+			if (isDeparting && missionaries.includes(missionary)) missionary.transferType = TransferType.ULI;
+		}
+		departingSelectionConfirmed = true;
+		departingMissionariesDialog.close();
+		renderImportedData();
+	});
 	defaultsInitialization = initializeDefaultData();
 
 	function displayName(before, after, period) {
@@ -1622,10 +1669,202 @@
 		missionaryCount.textContent = String(missionaries.length);
 		zoneCount.textContent = String(zones.length);
 		dataSummary.textContent = `${missionaries.length} ${missionaries.length === 1 ? "missionary" : "missionaries"} · ${zones.length} ${zones.length === 1 ? "zone" : "zones"}`;
+		updateWorkflowButtons();
 	}
 
 	function normalize(value) {
 		return value.toLocaleLowerCase().replace(/[^a-z0-9]/g, "");
+	}
+
+	function createStatusIcon(status) {
+		if (status === "none") return null;
+		const icon = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+		icon.setAttribute("viewBox", "0 0 24 24");
+		icon.setAttribute("aria-hidden", "true");
+		icon.setAttribute("fill", "none");
+		icon.setAttribute("stroke", "currentColor");
+		icon.setAttribute("stroke-width", "2");
+		icon.setAttribute("stroke-linecap", "round");
+		icon.setAttribute("stroke-linejoin", "round");
+		const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+		path.setAttribute("d", status === "complete"
+			? "m5 12 4 4L19 6"
+			: "M12 3 2.8 20h18.4L12 3Zm0 6v4m0 3h.01");
+		icon.append(path);
+		return icon;
+	}
+
+	function setWorkflowButton(button, label, status, isDisabled) {
+		button.disabled = isDisabled;
+		button.classList.toggle("is-complete", status === "complete");
+		button.classList.toggle("is-warning", status === "warning");
+		button.replaceChildren();
+		const icon = createStatusIcon(status);
+		if (icon) button.append(icon);
+		button.append(document.createTextNode(label));
+	}
+
+	function updateWorkflowButtons() {
+		const unindexedCount = [...unindexedAreas].filter((area) => !ignoredUnindexedAreas.has(area)).length;
+		setWorkflowButton(
+			unindexedAreasButton,
+			hasBeforeBoard ? `Areas not indexed (${unindexedCount})` : "Areas not indexed",
+			!hasBeforeBoard ? "none" : (unindexedCount > 0 ? "warning" : "complete"),
+			!hasBeforeBoard || unindexedCount === 0,
+		);
+
+		const boardsReady = hasBeforeBoard && hasAfterBoard;
+		const missingTransferTypes = missionaries.filter((missionary) =>
+			missionary.type !== MissionaryType.Senior
+			&& missionary.transferType == null
+			&& !ignoredTransferTypeMissionaries.has(missionary)).length;
+		setWorkflowButton(
+			missingTransferTypesButton,
+			boardsReady ? `Missionaries without transfer type (${missingTransferTypes})` : "Missionaries without transfer type",
+			boardsReady ? (missingTransferTypes > 0 ? "warning" : "complete") : "none",
+			!boardsReady,
+		);
+
+		const departingCount = missionaries.filter((missionary) => missionary.transferType === TransferType.ULI).length;
+		setWorkflowButton(
+			departingMissionariesButton,
+			departingSelectionConfirmed ? `${departingCount} departing missionaries` : "Select departing missionaries",
+			!hasAfterBoard ? "none" : (departingSelectionConfirmed ? "complete" : "warning"),
+			!hasAfterBoard,
+		);
+	}
+
+	function appendReviewMessage(list, message) {
+		const item = document.createElement("li");
+		item.className = "review-empty";
+		item.textContent = message;
+		list.append(item);
+	}
+
+	function appendReviewItem(list, text, isIgnored, onIgnore) {
+		const item = document.createElement("li");
+		item.className = "review-item";
+		item.classList.toggle("is-ignored", isIgnored);
+		const label = document.createElement("span");
+		label.className = "review-item-text";
+		label.textContent = text;
+		const ignoreButton = document.createElement("button");
+		ignoreButton.className = "secondary review-ignore-button";
+		ignoreButton.type = "button";
+		ignoreButton.textContent = isIgnored ? "Ignored" : "Ignore";
+		ignoreButton.disabled = isIgnored;
+		ignoreButton.addEventListener("click", onIgnore);
+		item.append(label, ignoreButton);
+		list.append(item);
+	}
+
+	function renderUnindexedAreas() {
+		unindexedAreasList.replaceChildren();
+		const areas = [...unindexedAreas].sort((first, second) =>
+			(first.nameAfter || first.nameBefore).localeCompare(second.nameAfter || second.nameBefore));
+		if (areas.length === 0) {
+			appendReviewMessage(unindexedAreasList, "No unindexed areas.");
+			return;
+		}
+		for (const area of areas) {
+			const areaName = area.nameAfter || area.nameBefore || "Not named";
+			const districtName = area.district.nameAfter || area.district.nameBefore || "Not named";
+			const zoneName = area.getZone("after") || area.getZone("before") || "Not named";
+			const isIgnored = ignoredUnindexedAreas.has(area);
+			appendReviewItem(
+				unindexedAreasList,
+				`${areaName} · ${districtName} District · ${zoneName} Zone`,
+				isIgnored,
+				() => {
+					ignoredUnindexedAreas.add(area);
+					renderUnindexedAreas();
+					updateWorkflowButtons();
+				},
+			);
+		}
+	}
+
+	function renderMissingTransferTypes() {
+		missingTransferTypesList.replaceChildren();
+		const missing = missionaries
+			.filter((missionary) => missionary.type !== MissionaryType.Senior && missionary.transferType == null)
+			.sort((first, second) => first.lastName.localeCompare(second.lastName) || first.firstName.localeCompare(second.firstName));
+		if (missing.length === 0) {
+			appendReviewMessage(missingTransferTypesList, "Every missionary has a transfer type.");
+			return;
+		}
+		for (const missionary of missing) {
+			const isIgnored = ignoredTransferTypeMissionaries.has(missionary);
+			appendReviewItem(
+				missingTransferTypesList,
+				`${missionary.firstName} ${missionary.lastName}`.trim(),
+				isIgnored,
+				() => {
+					ignoredTransferTypeMissionaries.add(missionary);
+					renderMissingTransferTypes();
+					updateWorkflowButtons();
+				},
+			);
+		}
+	}
+
+	function recalculateMissingTransferTypes() {
+		for (const missionary of missionaries) {
+			if (missionary.transferType != null) continue;
+			missionary.transferType = calculateTransferType(missionary);
+			if (missionary.transferType != null) ignoredTransferTypeMissionaries.delete(missionary);
+		}
+		renderMissingTransferTypes();
+		renderImportedData();
+	}
+
+	function reindexUnindexedAreas() {
+		for (const area of unindexedAreas) {
+			const index = findIndex(area.nameAfter || area.nameBefore);
+			if (index === null) continue;
+			area.index = index;
+			unindexedAreas.delete(area);
+			ignoredUnindexedAreas.delete(area);
+		}
+		renderUnindexedAreas();
+		updateWorkflowButtons();
+	}
+
+	function renderDepartingMissionaries() {
+		departingMissionariesList.replaceChildren();
+		const query = normalize(departingMissionarySearch.value.trim());
+		const sortedMissionaries = [...missionaries].sort((first, second) =>
+			first.lastName.localeCompare(second.lastName) || first.firstName.localeCompare(second.firstName));
+		const matchingMissionaries = sortedMissionaries.filter((missionary) =>
+			!query || normalize(`${missionary.lastName} ${missionary.firstName}`).includes(query));
+		if (matchingMissionaries.length === 0) {
+			appendReviewMessage(departingMissionariesList, missionaries.length ? "No missionaries match your search." : "No missionaries loaded.");
+			return;
+		}
+		for (const missionary of matchingMissionaries) {
+			const item = document.createElement("li");
+			const label = document.createElement("label");
+			const checkbox = document.createElement("input");
+			checkbox.type = "checkbox";
+			checkbox.checked = departingSelection.get(missionary) ?? false;
+			checkbox.addEventListener("change", () => departingSelection.set(missionary, checkbox.checked));
+			const name = document.createElement("span");
+			name.textContent = `${missionary.firstName} ${missionary.lastName}`.trim();
+			label.append(checkbox, name);
+			item.append(label);
+			departingMissionariesList.append(item);
+		}
+	}
+
+	function openDepartingMissionariesDialog() {
+		if (!hasAfterBoard) return;
+		departingSelection = new Map(missionaries.map((missionary) => [
+			missionary,
+			missionary.transferType === TransferType.ULI,
+		]));
+		departingMissionarySearch.value = "";
+		renderDepartingMissionaries();
+		departingMissionariesDialog.showModal();
 	}
 
 	function readField(row, aliases) {
@@ -1649,8 +1888,8 @@
 		switch (normalize(value)) {
 			case "elder": return MissionaryType.Elder;
 			case "sister": return MissionaryType.Sister;
-			case "senior": return MissionaryType.Senior;
-			case "temporary": return MissionaryType.Temporary;
+			case "seniorcouple": return MissionaryType.Senior;
+			case "temporaryassignment": return MissionaryType.Temporary;
 			default: return null;
 		}
 	}
@@ -1742,6 +1981,7 @@
 		if (!area) {
 			let index = findIndex(name);
 			area = new Area(district, index);
+			if (index === null) unindexedAreas.add(area);
 		}
 		assignName(area, period, name);
 		return area;
@@ -1806,6 +2046,9 @@
 		if (period === "before") {
 			missionaries.splice(0, missionaries.length);
 			zones.splice(0, zones.length);
+			unindexedAreas.clear();
+			ignoredUnindexedAreas.clear();
+			ignoredTransferTypeMissionaries.clear();
 		}
 
 		const matchedThisUpload = new Set();
@@ -1873,6 +2116,15 @@
 		try {
 			const assignments = await readAssignments(file, period);
 			const result = applyAssignments(assignments, period);
+			if (period === "before") {
+				hasBeforeBoard = true;
+				hasAfterBoard = false;
+				departingSelectionConfirmed = false;
+			} else {
+				hasAfterBoard = true;
+				departingSelectionConfirmed = false;
+				ignoredTransferTypeMissionaries.clear();
+			}
 			renderImportedData();
 			const summary = period === "before"
 				? `${result.added} missionaries loaded; ${zones.length} zones tracked.`

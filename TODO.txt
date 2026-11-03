@@ -32,3 +32,11 @@ Afterward it needs to ask the user to select the depatring missionaries
 
 Add an inforgraphic at the beginning about how to download the data.
 Add a warning at the end begging the APs to at least confirm the list of people who are transfering because it can calculate false positives.
+
+
+
+The three buttons under the added files should be for handling all the potential problems
+1. Areas not indexed
+2. missionaries with no transfer type
+3. Select departing missionaries
+

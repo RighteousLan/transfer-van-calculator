@@ -73,10 +73,10 @@
 					</div>
 				</section>
 			</div>
-			<div class="placeholders" aria-label="Coming soon">
-				<button class="placeholder" type="button" disabled>Calculate Transfer Types</button>
-				<button class="placeholder" type="button" disabled>Route options</button>
-				<button class="placeholder" type="button" disabled>Calculate transfers</button>
+			<div class="placeholders" aria-label="Transfer review">
+				<button class="placeholder" id="unindexed-areas-button" type="button" disabled></button>
+				<button class="placeholder" id="missing-transfer-types-button" type="button" disabled></button>
+				<button class="placeholder" id="departing-missionaries-button" type="button" disabled></button>
 			</div>
 			<section class="data-output" aria-labelledby="data-output-title">
 				<header class="data-heading">
@@ -307,6 +307,54 @@
 				<button class="primary" id="defaults-confirm-accept" type="button">Save defaults</button>
 			</footer>
 		</div>
+	</dialog>
+	<dialog class="workflow-dialog review-dialog" id="unindexed-areas-dialog" aria-labelledby="unindexed-areas-title">
+		<header class="dialog-header">
+			<div>
+				<p class="eyebrow">Transfer review</p>
+				<h2 id="unindexed-areas-title">Areas not indexed</h2>
+			</div>
+			<button class="review-reindex-button" id="reindex-unindexed-areas" type="button" aria-label="Re-index unindexed areas" title="Re-index areas">
+				<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 7v5h-5M4 17v-5h5" /><path d="M5.6 9a7 7 0 0 1 11.6-2L20 12M4 12l2.8 5a7 7 0 0 0 11.6-2" /></svg>
+			</button>
+		</header>
+		<ul class="review-list" id="unindexed-areas-list"></ul>
+		<footer class="dialog-actions">
+			<button class="secondary" id="close-unindexed-areas" type="button">Close</button>
+		</footer>
+	</dialog>
+	<dialog class="workflow-dialog review-dialog" id="missing-transfer-types-dialog" aria-labelledby="missing-transfer-types-title">
+		<header class="dialog-header">
+			<div>
+				<p class="eyebrow">Transfer review</p>
+				<h2 id="missing-transfer-types-title">Missionaries without transfer type</h2>
+			</div>
+			<button class="review-reindex-button" id="recalculate-missing-transfer-types" type="button" aria-label="Recalculate missing transfer types" title="Recalculate transfer types">
+				<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 7v5h-5M4 17v-5h5" /><path d="M5.6 9a7 7 0 0 1 11.6-2L20 12M4 12l2.8 5a7 7 0 0 0 11.6-2" /></svg>
+			</button>
+		</header>
+		<ul class="review-list" id="missing-transfer-types-list"></ul>
+		<footer class="dialog-actions">
+			<button class="secondary" id="close-missing-transfer-types" type="button">Close</button>
+		</footer>
+	</dialog>
+	<dialog class="workflow-dialog review-dialog departing-dialog" id="departing-missionaries-dialog" aria-labelledby="departing-missionaries-title">
+		<form id="departing-missionaries-form">
+			<header class="dialog-header">
+				<div>
+					<p class="eyebrow">Transfer review</p>
+					<h2 id="departing-missionaries-title">Select departing missionaries</h2>
+				</div>
+			</header>
+			<label class="dialog-field" for="departing-missionary-search">Search missionaries
+				<input id="departing-missionary-search" type="search" autocomplete="off">
+			</label>
+			<ul class="review-list departing-list" id="departing-missionaries-list"></ul>
+			<footer class="dialog-actions">
+				<button class="secondary" id="cancel-departing-missionaries" type="button">Cancel</button>
+				<button class="primary" type="submit">Confirm selection</button>
+			</footer>
+		</form>
 	</dialog>
 	<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 	<script src="./src/models.js"></script>

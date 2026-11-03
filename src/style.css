@@ -231,7 +231,32 @@ button svg, .upload-button svg { width: 17px; height: 17px; }
 	margin-top: 24px;
 }
 
-.placeholder { width: 100%; }
+.placeholder {
+	width: 100%;
+	min-width: 0;
+	justify-content: flex-start;
+	padding: 8px 12px;
+	text-align: left;
+}
+
+.placeholder svg {
+	flex: 0 0 18px;
+	width: 18px;
+	height: 18px;
+}
+
+.placeholder.is-warning {
+	border-color: #c17c29;
+	color: #8f5716;
+	background: #fff8eb;
+}
+
+.placeholder.is-complete,
+.placeholder.is-complete:disabled {
+	border-color: #89ad9b;
+	color: var(--green-dark);
+	background: var(--soft-green);
+}
 
 .data-output {
 	margin-top: 40px;
@@ -784,6 +809,92 @@ button svg, .upload-button svg { width: 17px; height: 17px; }
 .workflow-dialog::backdrop { background: rgb(20 35 29 / 42%); }
 
 .workflow-dialog form { display: grid; gap: 22px; }
+
+.review-dialog {
+	width: min(calc(100vw - 32px), 560px);
+	overflow-y: auto;
+}
+
+.review-dialog > .dialog-header { margin-bottom: 20px; }
+
+.review-dialog > .dialog-actions { margin-top: 20px; }
+
+.review-reindex-button {
+	width: 40px;
+	min-height: 40px;
+	flex: 0 0 40px;
+	margin-left: auto;
+	padding: 0;
+}
+
+.review-reindex-button svg {
+	width: 18px;
+	height: 18px;
+}
+
+.review-list {
+	max-height: min(48vh, 440px);
+	max-height: min(48dvh, 440px);
+	overflow-y: auto;
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+
+.review-list li {
+	padding: 11px 12px;
+	border-bottom: 1px solid var(--line);
+	font-size: 14px;
+}
+
+.review-list li:last-child { border-bottom: 0; }
+
+.review-list li.review-item {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+}
+
+.review-item-text {
+	min-width: 0;
+	flex: 1;
+	transition: color 120ms ease;
+}
+
+.review-item.is-ignored .review-item-text { color: #8d9690; }
+
+.review-ignore-button {
+	min-height: 32px;
+	flex: 0 0 auto;
+	padding: 0 10px;
+	font-size: 12px;
+}
+
+.departing-dialog form { gap: 18px; }
+
+.departing-list li { padding: 0; }
+
+.departing-list label {
+	display: flex;
+	min-height: 44px;
+	align-items: center;
+	gap: 12px;
+	padding: 8px 12px;
+	cursor: pointer;
+}
+
+.departing-list input[type="checkbox"] {
+	width: 18px;
+	height: 18px;
+	flex: 0 0 18px;
+	margin: 0;
+	accent-color: var(--green);
+}
+
+.review-list .review-empty {
+	padding: 16px 0;
+	color: var(--muted);
+}
 
 .apartment-edit-dialog {
 	width: min(calc(100vw - 32px), 680px);
