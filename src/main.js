@@ -25,6 +25,9 @@
 	const tripView = requireElement("trip-view");
 	const nextView = requireElement("next-view");
 	const nextScreenButton = requireElement("next-screen");
+	const tripRouteSelect = requireElement("trip-route-select");
+	const tripRouteEmpty = requireElement("trip-route-empty");
+	const tripTimeline = requireElement("trip-timeline");
 	const routesView = requireElement("routes-view");
 	const routeListView = requireElement("route-list-view");
 	const routeEditorView = requireElement("route-editor-view");
@@ -116,6 +119,9 @@
 	let hasAfterBoard = false;
 	let departingSelectionConfirmed = false;
 	let departingSelection = new Map();
+	let activeTripRoute = null;
+	let tripPlansByRoute = new WeakMap();
+	let tripDrag = null;
 	let editingRouteDraft = null;
 	let editingRouteIndex = null;
 	let draggedRouteStop = null;
@@ -151,8 +157,10 @@
 		window.scrollTo(0, 0);
 	});
 
-	nextScreenButton.addEventListener("click", () => {
+	nextScreenButton.addEventListener("click", async () => {
 		if (nextScreenButton.disabled) return;
+		await defaultsInitialization;
+		renderTripTimeline();
 		tripView.hidden = true;
 		nextView.hidden = false;
 		window.scrollTo(0, 0);
@@ -162,6 +170,11 @@
 		nextView.hidden = true;
 		tripView.hidden = false;
 		window.scrollTo(0, 0);
+	});
+
+	tripRouteSelect.addEventListener("change", () => {
+		const route = routes[Number(tripRouteSelect.value)];
+		renderTripTimeline(route ?? null);
 	});
 
 	function setSidebarOpen(isOpen) {
@@ -1821,7 +1834,7 @@
 			const isIgnored = ignoredTransferTypeMissionaries.has(missionary);
 			appendReviewItem(
 				missingTransferTypesList,
-				`${missionary.firstName} ${missionary.lastName}`.trim(),
+				missionary.getRealName(),
 				isIgnored,
 				() => {
 					ignoredTransferTypeMissionaries.add(missionary);
@@ -1873,7 +1886,7 @@
 			checkbox.checked = departingSelection.get(missionary) ?? false;
 			checkbox.addEventListener("change", () => departingSelection.set(missionary, checkbox.checked));
 			const name = document.createElement("span");
-			name.textContent = `${missionary.firstName} ${missionary.lastName}`.trim();
+			name.textContent = missionary.getRealName();
 			label.append(checkbox, name);
 			item.append(label);
 			departingMissionariesList.append(item);
@@ -1889,6 +1902,201 @@
 		departingMissionarySearch.value = "";
 		renderDepartingMissionaries();
 		departingMissionariesDialog.showModal();
+	}
+
+	function getTripRoutePlans(route) {
+		let plans = tripPlansByRoute.get(route);
+		if (!plans) {
+			plans = new Map();
+			tripPlansByRoute.set(route, plans);
+		}
+		return plans;
+	}
+
+	function createTripMissionary(missionary, stop, source, draggable = false) {
+		const token = document.createElement("button");
+		token.className = "trip-missionary";
+		token.type = "button";
+		token.textContent = missionary.getRealName() || "Unidentified missionary";
+		token.draggable = draggable;
+		token.disabled = !draggable;
+		if (draggable) {
+			token.title = "Drag to the paired box";
+			token.addEventListener("dragstart", (event) => {
+				tripDrag = { missionary, stop, source };
+				if (event.dataTransfer) {
+					event.dataTransfer.effectAllowed = "move";
+					event.dataTransfer.setData("text/plain", "missionary");
+				}
+			});
+			token.addEventListener("dragend", () => { tripDrag = null; });
+		}
+		return token;
+	}
+
+	function createTripBox(stop, areaClass, title, members, draggableMembers = new Set(), acceptsDrop = false) {
+		const box = document.createElement("section");
+		box.className = `trip-box ${areaClass}`;
+		const heading = document.createElement("h3");
+		heading.textContent = title;
+		const list = document.createElement("ul");
+		list.className = "trip-box-list";
+		list.setAttribute("aria-label", title);
+		if (members.length === 0) {
+			const empty = document.createElement("li");
+			empty.className = "trip-box-empty";
+			empty.textContent = "None";
+			list.append(empty);
+		} else {
+			for (const missionary of members) {
+				const item = document.createElement("li");
+				item.append(createTripMissionary(missionary, stop, areaClass, draggableMembers.has(missionary)));
+				list.append(item);
+			}
+		}
+		box.append(heading, list);
+		if (acceptsDrop) {
+			box.addEventListener("dragover", (event) => {
+				if (!tripDrag || tripDrag.stop !== stop || !isTripDropAllowed(tripDrag.source, areaClass)) return;
+				event.preventDefault();
+				if (event.dataTransfer) event.dataTransfer.dropEffect = "move";
+				box.classList.add("is-drop-target");
+			});
+			box.addEventListener("dragleave", (event) => {
+				if (!box.contains(event.relatedTarget)) box.classList.remove("is-drop-target");
+			});
+			box.addEventListener("drop", (event) => {
+				if (!tripDrag || tripDrag.stop !== stop || !isTripDropAllowed(tripDrag.source, areaClass)) return;
+				event.preventDefault();
+				box.classList.remove("is-drop-target");
+				moveTripMissionary(stop, tripDrag.missionary, tripDrag.source, areaClass);
+				tripDrag = null;
+			});
+		}
+		return box;
+	}
+
+	function isTripDropAllowed(source, destination) {
+		return (source === "house-after" && destination === "pick-up")
+			|| (source === "pick-up" && destination === "house-after")
+			|| (source === "drop-off" && destination === "van-after")
+			|| (source === "van-after" && destination === "drop-off");
+	}
+
+	function moveTripMissionary(stop, missionary, source, destination) {
+		const plan = getTripRoutePlans(activeTripRoute).get(stop);
+		if (!plan || !isTripDropAllowed(source, destination)) return;
+		if (source === "house-after") {
+			plan.houseAfter.delete(missionary);
+			plan.boarding.add(missionary);
+		} else if (source === "pick-up") {
+			plan.boarding.delete(missionary);
+			plan.houseAfter.add(missionary);
+		} else if (source === "van-after") {
+			plan.alighting.add(missionary);
+		} else if (source === "drop-off") {
+			plan.alighting.delete(missionary);
+		}
+		renderTripTimeline(activeTripRoute);
+	}
+
+	function formatTripArea(area) {
+		if (!area.nameBefore || area.nameBefore === area.nameAfter) return area.nameBefore || area.nameAfter || "Unnamed area";
+		return `${area.nameBefore} → ${area.nameAfter || "—"}`;
+	}
+
+	function renderTripStop(stop, index, plans, vanBefore) {
+		let plan = plans.get(stop);
+		const houseBefore = missionaries.filter((missionary) => stop.apartments.includes(missionary.currentLoc));
+		if (!plan) {
+			plan = { houseAfter: new Set(houseBefore), boarding: new Set(), alighting: new Set() };
+			plans.set(stop, plan);
+		}
+		const carriedRiders = vanBefore.filter((missionary) => !plan.alighting.has(missionary));
+		const vanAfter = [...new Set([...carriedRiders, ...plan.boarding])];
+		const primaryApartment = stop.primaryApartment;
+		const stopElement = document.createElement("article");
+		stopElement.className = "trip-stop";
+		stopElement.setAttribute("aria-label", `Stop ${index + 1}: ${primaryApartment?.name || "Unnamed apartment"}`);
+
+		const house = document.createElement("section");
+		house.className = "trip-stop-house";
+		const houseLabel = document.createElement("span");
+		houseLabel.className = "trip-stop-kicker";
+		houseLabel.textContent = "Primary apartment";
+		const houseName = document.createElement("h2");
+		houseName.textContent = primaryApartment?.name || primaryApartment?.address || "Unnamed apartment";
+		const areaList = document.createElement("ul");
+		areaList.className = "trip-area-list";
+		const areas = [...new Set(stop.apartments.flatMap((apartment) => apartment.teachingAreas))];
+		for (const area of areas) {
+			const item = document.createElement("li");
+			item.textContent = formatTripArea(area);
+			areaList.append(item);
+		}
+		if (areas.length === 0) {
+			const item = document.createElement("li");
+			item.textContent = "No teaching areas";
+			areaList.append(item);
+		}
+		house.append(houseLabel, houseName, areaList);
+		stopElement.append(
+			house,
+			createTripBox(stop, "house-before", "In house before", houseBefore),
+			createTripBox(stop, "house-after", "In house after", [...plan.houseAfter], plan.houseAfter, true),
+			createTripBox(stop, "pick-up", "Get on the van", [...plan.boarding], plan.boarding, true),
+		);
+
+		const marker = document.createElement("div");
+		marker.className = "trip-stop-marker";
+		marker.innerHTML = `<span>${index + 1}</span><small>Stop</small>`;
+		stopElement.append(
+			marker,
+			createTripBox(stop, "drop-off", "Get off the van", [...plan.alighting], plan.alighting, true),
+			createTripBox(stop, "van-after", "In the van after", vanAfter, new Set(carriedRiders), true),
+			createTripBox(stop, "van-before", "In the van before", vanBefore),
+		);
+
+		const vanFigure = document.createElement("div");
+		vanFigure.className = "trip-van-figure";
+		vanFigure.setAttribute("aria-label", "Transfer van");
+		vanFigure.innerHTML = '<svg viewBox="0 0 120 62" role="img" aria-hidden="true"><path d="M8 13h68v34H8zM76 25h21l15 14v8H76z" /><path d="M84 28v11h21M19 22h45M19 30h45" /><circle cx="29" cy="49" r="8" /><circle cx="95" cy="49" r="8" /></svg><span>Transfer van</span>';
+		stopElement.append(vanFigure);
+		return { element: stopElement, vanAfter };
+	}
+
+	function renderTripTimeline(route = null) {
+		const selectedRoute = routes.includes(route)
+			? route
+			: (routes.includes(activeTripRoute) ? activeTripRoute : routes[0] ?? null);
+		activeTripRoute = selectedRoute;
+		tripRouteSelect.replaceChildren();
+		for (const [index, candidate] of routes.entries()) {
+			const option = document.createElement("option");
+			option.value = String(index);
+			option.textContent = candidate.name || `Route ${index + 1}`;
+			option.selected = candidate === selectedRoute;
+			tripRouteSelect.append(option);
+		}
+		tripRouteSelect.disabled = routes.length === 0;
+		tripRouteEmpty.hidden = routes.length > 0;
+		tripTimeline.replaceChildren();
+		if (!selectedRoute) return;
+		if (selectedRoute.stops.length === 0) {
+			const empty = document.createElement("p");
+			empty.className = "trip-timeline-empty";
+			empty.textContent = "This route has no stops yet.";
+			tripTimeline.append(empty);
+			return;
+		}
+
+		const plans = getTripRoutePlans(selectedRoute);
+		let vanBefore = [];
+		for (const [index, stop] of selectedRoute.stops.entries()) {
+			const rendered = renderTripStop(stop, index, plans, vanBefore);
+			tripTimeline.append(rendered.element);
+			vanBefore = rendered.vanAfter;
+		}
 	}
 
 	function readField(row, aliases) {

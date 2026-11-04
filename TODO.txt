@@ -29,3 +29,7 @@ Add an inforgraphic at the beginning about how to download the data.
 Add a warning at the end begging the APs to at least confirm the list of people who are transfering because it can calculate false positives.
 
 
+
+Make adjustments to the travel screen:
+-Routes should calculate who must be picked up and dropped off and place them that way, and visually identify them
+-For routes coming from Duma, the starting people in the house should only be the list of people in all apartments of the stop IF they were not edited in the morning vans. If they were edited in the morning van, it should be the In house after list

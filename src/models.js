@@ -205,6 +205,10 @@
 		positionAfter = "";
 		currentLoc = null;
 		transferType = null;
+
+		getRealName() {
+			return [this.type, this.lastName].filter(Boolean).join(" ");
+		}
 	}
 
 	window.TransferVanModels = {
