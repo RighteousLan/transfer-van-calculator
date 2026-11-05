@@ -56,12 +56,16 @@
 	const unindexedAreasButton = requireElement("unindexed-areas-button");
 	const missingTransferTypesButton = requireElement("missing-transfer-types-button");
 	const departingMissionariesButton = requireElement("departing-missionaries-button");
+	const missingApartmentsButton = requireElement("missing-apartments-button");
 	const unindexedAreasDialog = requireElement("unindexed-areas-dialog");
 	const unindexedAreasList = requireElement("unindexed-areas-list");
 	const reindexUnindexedAreasButton = requireElement("reindex-unindexed-areas");
 	const missingTransferTypesDialog = requireElement("missing-transfer-types-dialog");
 	const missingTransferTypesList = requireElement("missing-transfer-types-list");
 	const recalculateMissingTransferTypesButton = requireElement("recalculate-missing-transfer-types");
+	const missingApartmentsDialog = requireElement("missing-apartments-dialog");
+	const missingApartmentsList = requireElement("missing-apartments-list");
+	const refreshMissingApartmentsButton = requireElement("refresh-missing-apartments");
 	const departingMissionariesDialog = requireElement("departing-missionaries-dialog");
 	const departingMissionariesForm = requireElement("departing-missionaries-form");
 	const departingMissionarySearch = requireElement("departing-missionary-search");
@@ -115,6 +119,7 @@
 	const unindexedAreas = new Set();
 	const ignoredUnindexedAreas = new Set();
 	const ignoredTransferTypeMissionaries = new Set();
+	const ignoredMissingApartmentMissionaries = new Set();
 	let hasBeforeBoard = false;
 	let hasAfterBoard = false;
 	let departingSelectionConfirmed = false;
@@ -1543,6 +1548,12 @@
 	});
 	recalculateMissingTransferTypesButton.addEventListener("click", recalculateMissingTransferTypes);
 	requireElement("close-missing-transfer-types").addEventListener("click", () => missingTransferTypesDialog.close());
+	missingApartmentsButton.addEventListener("click", () => {
+		renderMissingApartments();
+		missingApartmentsDialog.showModal();
+	});
+	refreshMissingApartmentsButton.addEventListener("click", refreshMissingApartments);
+	requireElement("close-missing-apartments").addEventListener("click", () => missingApartmentsDialog.close());
 	departingMissionariesButton.addEventListener("click", openDepartingMissionariesDialog);
 	departingMissionarySearch.addEventListener("input", renderDepartingMissionaries);
 	requireElement("cancel-departing-missionaries").addEventListener("click", () => departingMissionariesDialog.close());
@@ -1755,6 +1766,17 @@
 			!boardsReady,
 		);
 
+		const missingApartments = missionaries.filter((missionary) =>
+			missionary.areaBefore
+			&& !missionary.currentLoc
+			&& !ignoredMissingApartmentMissionaries.has(missionary)).length;
+		setWorkflowButton(
+			missingApartmentsButton,
+			hasBeforeBoard ? `Missionaries without apartments (${missingApartments})` : "Missionaries without apartments",
+			!hasBeforeBoard ? "none" : (missingApartments > 0 ? "warning" : "complete"),
+			!hasBeforeBoard,
+		);
+
 		const departingCount = missionaries.filter((missionary) => missionary.transferType === TransferType.ULI).length;
 		setWorkflowButton(
 			departingMissionariesButton,
@@ -1767,6 +1789,7 @@
 			&& unindexedCount === 0
 			&& boardsReady
 			&& missingTransferTypes === 0
+			&& missingApartments === 0
 			&& departingSelectionConfirmed
 		);
 	}
@@ -1843,6 +1866,45 @@
 				},
 			);
 		}
+	}
+
+	function renderMissingApartments() {
+		missingApartmentsList.replaceChildren();
+		const missing = missionaries
+			.filter((missionary) => missionary.areaBefore && !missionary.currentLoc)
+			.sort((first, second) => first.lastName.localeCompare(second.lastName) || first.firstName.localeCompare(second.firstName));
+		if (missing.length === 0) {
+			appendReviewMessage(missingApartmentsList, "Every missionary has an apartment.");
+			return;
+		}
+		for (const missionary of missing) {
+			const isIgnored = ignoredMissingApartmentMissionaries.has(missionary);
+			appendReviewItem(
+				missingApartmentsList,
+				missionary.getRealName(),
+				isIgnored,
+				() => {
+					ignoredMissingApartmentMissionaries.add(missionary);
+					renderMissingApartments();
+					updateWorkflowButtons();
+				},
+			);
+		}
+	}
+
+	function refreshMissingApartments() {
+		for (const missionary of missionaries) {
+			if (missionary.currentLoc || !missionary.areaBefore) continue;
+			const areaNames = [missionary.areaBefore.nameBefore, missionary.areaBefore.nameAfter]
+				.filter(Boolean)
+				.map(normalize);
+			if (areaNames.length === 0) continue;
+			missionary.currentLoc = apartments.find((apartment) => apartment.teachingAreas.some((teachingArea) =>
+				areaNames.includes(normalize(teachingArea.nameBefore)) || areaNames.includes(normalize(teachingArea.nameAfter)))) ?? null;
+			if (missionary.currentLoc) ignoredMissingApartmentMissionaries.delete(missionary);
+		}
+		renderMissingApartments();
+		renderImportedData();
 	}
 
 	function recalculateMissingTransferTypes() {
@@ -2281,6 +2343,7 @@
 			unindexedAreas.clear();
 			ignoredUnindexedAreas.clear();
 			ignoredTransferTypeMissionaries.clear();
+			ignoredMissingApartmentMissionaries.clear();
 		}
 
 		const matchedThisUpload = new Set();

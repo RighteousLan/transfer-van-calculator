@@ -80,7 +80,9 @@
 			<div class="placeholders" aria-label="Transfer review">
 				<button class="placeholder" id="unindexed-areas-button" type="button" disabled></button>
 				<button class="placeholder" id="missing-transfer-types-button" type="button" disabled></button>
+				<button class="placeholder" id="missing-apartments-button" type="button" disabled></button>
 				<button class="placeholder" id="departing-missionaries-button" type="button" disabled></button>
+				
 			</div>
 			<section class="data-output" aria-labelledby="data-output-title">
 				<header class="data-heading">
@@ -359,6 +361,21 @@
 		<ul class="review-list" id="missing-transfer-types-list"></ul>
 		<footer class="dialog-actions">
 			<button class="secondary" id="close-missing-transfer-types" type="button">Close</button>
+		</footer>
+	</dialog>
+	<dialog class="workflow-dialog review-dialog" id="missing-apartments-dialog" aria-labelledby="missing-apartments-title">
+		<header class="dialog-header">
+			<div>
+				<p class="eyebrow">Transfer review</p>
+				<h2 id="missing-apartments-title">Missionaries without apartments</h2>
+			</div>
+			<button class="review-reindex-button" id="refresh-missing-apartments" type="button" aria-label="Refresh missionaries without apartments" title="Refresh apartment assignments">
+				<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 7v5h-5M4 17v-5h5" /><path d="M5.6 9a7 7 0 0 1 11.6-2L20 12M4 12l2.8 5a7 7 0 0 0 11.6-2" /></svg>
+			</button>
+		</header>
+		<ul class="review-list" id="missing-apartments-list"></ul>
+		<footer class="dialog-actions">
+			<button class="secondary" id="close-missing-apartments" type="button">Close</button>
 		</footer>
 	</dialog>
 	<dialog class="workflow-dialog review-dialog departing-dialog" id="departing-missionaries-dialog" aria-labelledby="departing-missionaries-title">
