@@ -2048,17 +2048,23 @@
 		return plan;
 	}
 
+	function getMorningRoutes() {
+		const morningRouteNames = new Set(["North to Duma", "South to Duma"]);
+		return routes.filter((candidate) =>
+			morningRouteNames.has(candidate.name) && candidate.time === TripTime.Morning);
+	}
+
 	function getMorningRouteFor(route) {
 		const morningRouteName = {
 			"Duma to North": "North to Duma",
 			"Duma to South": "South to Duma",
 		}[route.name];
 		if (!morningRouteName) return null;
-		return routes.find((candidate) =>
-			candidate.name === morningRouteName && candidate.time === TripTime.Morning) ?? null;
+		return getMorningRoutes().find((candidate) => candidate.name === morningRouteName) ?? null;
 	}
 
 	function getTripHouseBefore(routePlan, stop) {
+		let houseBefore = null;
 		if (routePlan.route.time === TripTime.Afternoon) {
 			const apartmentName = stop.primaryApartment?.name;
 			const morningRoute = getMorningRouteFor(routePlan.route);
@@ -2067,16 +2073,30 @@
 				normalize(candidate.primaryApartment?.name ?? "") === apartmentNameKey);
 			if (morningRoute && morningStop) {
 				const morningPlan = getTripStopPlan(getTripRoutePlans(morningRoute), morningStop);
-				return new Set([
+				houseBefore = new Set([
 					...morningPlan.houseAfter,
 					...morningPlan.alighting,
 					...morningPlan.automaticDropOff,
 				]);
 			}
 		}
-		return new Set([...routePlan.missionaryAreaEntries]
-			.filter(([, entry]) => stop.apartments.includes(entry.currentApartment))
-			.map(([missionary]) => missionary));
+		if (!houseBefore) {
+			houseBefore = new Set([...routePlan.missionaryAreaEntries]
+				.filter(([, entry]) => stop.apartments.includes(entry.currentApartment))
+				.map(([missionary]) => missionary));
+		}
+
+		if (routePlan.route.time === TripTime.Afternoon && routePlan.route.stops[0] === stop) {
+			for (const morningRoute of getMorningRoutes()) {
+				const finalStop = morningRoute.stops.at(-1);
+				if (!finalStop) continue;
+				const morningPlan = getTripStopPlan(getTripRoutePlans(morningRoute), finalStop);
+				for (const missionary of [...morningPlan.alighting, ...morningPlan.automaticDropOff]) {
+					houseBefore.add(missionary);
+				}
+			}
+		}
+		return houseBefore;
 	}
 
 	function automaticPickUpTypes(routeName) {
@@ -2413,8 +2433,10 @@
 		}
 
 		const plans = getTripRoutePlans(selectedRoute);
-		const morningRoute = getMorningRouteFor(selectedRoute);
-		if (morningRoute) {
+		const morningRoutes = selectedRoute.time === TripTime.Afternoon
+			? getMorningRoutes()
+			: [getMorningRouteFor(selectedRoute)].filter(Boolean);
+		for (const morningRoute of morningRoutes) {
 			const morningPlans = getTripRoutePlans(morningRoute);
 			refreshTripHouseBefore(morningPlans);
 			applyAutomaticTripMoves(morningPlans);
