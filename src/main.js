@@ -5,6 +5,7 @@
 		District,
 		Missionary,
 		MissionaryType,
+		TripTime,
 		TransferType,
 		Route,
 		Zone,
@@ -127,6 +128,7 @@
 	let activeTripRoute = null;
 	let tripPlansByRoute = new WeakMap();
 	let tripDrag = null;
+	let tripAreaDrag = null;
 	let editingRouteDraft = null;
 	let editingRouteIndex = null;
 	let draggedRouteStop = null;
@@ -165,6 +167,7 @@
 	nextScreenButton.addEventListener("click", async () => {
 		if (nextScreenButton.disabled) return;
 		await defaultsInitialization;
+		//Here
 		renderTripTimeline();
 		tripView.hidden = true;
 		nextView.hidden = false;
@@ -198,10 +201,17 @@
 		"Duma to South",
 	];
 
+	function defaultRouteTime(name) {
+		if (name === "Duma to North" || name === "Duma to South") return TripTime.Afternoon;
+		if (name === "North to Duma" || name === "South to Duma") return TripTime.Morning;
+		return TripTime.Morning;
+	}
+
 	function createBuiltInRoutes() {
 		return BUILT_IN_ROUTE_NAMES.map((name) => {
 			const route = new Route();
 			route.name = name;
+			route.time = defaultRouteTime(name);
 			return route;
 		});
 	}
@@ -269,6 +279,7 @@
 			apartments: apartments.map(serializeApartment),
 			routes: routes.map((route) => ({
 				name: route.name,
+				time: route.time,
 				stops: route.stops.map((stop) => ({
 					primaryApartmentIndex: apartments.indexOf(stop.primaryApartment),
 					secondaryApartmentIndexes: stop.secondaryApartments.map((apartment) => apartments.indexOf(apartment)),
@@ -288,6 +299,9 @@
 		const restoredRoutes = data.routes.map((routeData) => {
 			const route = new Route();
 			route.name = String(routeData?.name ?? "");
+			route.time = Object.values(TripTime).includes(routeData?.time)
+				? routeData.time
+				: defaultRouteTime(route.name);
 			const stopRecords = Array.isArray(routeData?.stops)
 				? routeData.stops
 				: (routeData?.apartmentIndexes ?? []).map((apartmentIndex) => ({ primaryApartmentIndex: apartmentIndex }));
@@ -522,6 +536,7 @@
 	function cloneRoute(route) {
 		const draft = new Route();
 		draft.name = route.name || "";
+		draft.time = route.time;
 		for (const stop of route.stops) {
 			const clonedStop = draft.addStop(stop.primaryApartment);
 			for (const apartment of stop.secondaryApartments) draft.addSecondaryApartment(clonedStop, apartment);
@@ -1967,12 +1982,141 @@
 	}
 
 	function getTripRoutePlans(route) {
-		let plans = tripPlansByRoute.get(route);
-		if (!plans) {
-			plans = new Map();
-			tripPlansByRoute.set(route, plans);
+		let routePlan = tripPlansByRoute.get(route);
+		if (!routePlan) {
+			const routeApartments = [...new Set(route.stops.flatMap((stop) => stop.apartments))];
+			const areaEntries = new Map(routeApartments.map((apartment) => [
+				apartment,
+				new Set(apartment.teachingAreas.map((area) => ({
+					area,
+					originalApartment: apartment,
+					currentApartment: apartment,
+				}))),
+			]));
+			const missionaryAreaEntries = new Map();
+			for (const missionary of missionaries) {
+				if (!missionary.areaBefore) continue;
+				const areaNames = new Set([missionary.areaBefore.nameBefore, missionary.areaBefore.nameAfter]
+					.filter(Boolean)
+					.map(normalize));
+				const candidateApartments = missionary.currentLoc && areaEntries.has(missionary.currentLoc)
+					? [missionary.currentLoc, ...routeApartments.filter((apartment) => apartment !== missionary.currentLoc)]
+					: routeApartments;
+				for (const apartment of candidateApartments) {
+					const entry = [...areaEntries.get(apartment)].find(({ area }) =>
+						areaNames.has(normalize(area.nameBefore)) || areaNames.has(normalize(area.nameAfter)));
+					if (!entry) continue;
+					missionaryAreaEntries.set(missionary, entry);
+					break;
+				}
+			}
+			routePlan = { route, stops: new Map(), areaEntries, missionaryAreaEntries };
+			tripPlansByRoute.set(route, routePlan);
 		}
-		return plans;
+		return routePlan;
+	}
+
+	function getTripStopPlan(routePlan, stop) {
+		let plan = routePlan.stops.get(stop);
+		if (!plan) {
+			const houseBefore = getTripHouseBefore(routePlan, stop);
+			plan = {
+				houseBefore,
+				houseAfter: new Set(houseBefore),
+				houseAfterOverrides: new Set(),
+				boarding: new Set(),
+				alighting: new Set(),
+			};
+			routePlan.stops.set(stop, plan);
+		}
+		return plan;
+	}
+
+	function getTripHouseBefore(routePlan, stop) {
+		return new Set([...routePlan.missionaryAreaEntries]
+			.filter(([, entry]) => stop.apartments.includes(entry.currentApartment))
+			.map(([missionary]) => missionary));
+	}
+
+	function refreshTripHouseBefore(routePlan) {
+		for (const stop of routePlan.route.stops) {
+			const plan = getTripStopPlan(routePlan, stop);
+			const nextHouseBefore = getTripHouseBefore(routePlan, stop);
+			for (const missionary of plan.houseBefore) {
+				if (!nextHouseBefore.has(missionary) && !plan.houseAfterOverrides.has(missionary)) {
+					plan.houseAfter.delete(missionary);
+				}
+			}
+			for (const missionary of nextHouseBefore) {
+				if (!plan.houseBefore.has(missionary) && !plan.houseAfterOverrides.has(missionary)) {
+					plan.houseAfter.add(missionary);
+				}
+			}
+			plan.houseBefore = nextHouseBefore;
+		}
+	}
+
+	function createTripAreaChip(entry, routePlan) {
+		const areaButton = document.createElement("button");
+		areaButton.className = "trip-area-chip";
+		areaButton.classList.toggle("is-moved", entry.currentApartment !== entry.originalApartment);
+		areaButton.type = "button";
+		areaButton.draggable = true;
+		areaButton.textContent = formatTripArea(entry.area);
+		areaButton.title = entry.currentApartment === entry.originalApartment
+			? "Drag onto another teaching area to reassign it"
+			: "Moved from its original assignment";
+		areaButton.addEventListener("dragstart", (event) => {
+			tripAreaDrag = { entry, sourceApartment: entry.currentApartment, routePlan };
+			if (event.dataTransfer) {
+				event.dataTransfer.effectAllowed = "move";
+				event.dataTransfer.setData("text/plain", "teaching-area");
+			}
+		});
+		areaButton.addEventListener("dragend", () => { tripAreaDrag = null; });
+		return areaButton;
+	}
+
+	function createTripTeachingAreas(stop, routePlan) {
+		const teachingAreas = document.createElement("div");
+		teachingAreas.className = "trip-teaching-areas";
+		teachingAreas.setAttribute("aria-label", "Teaching areas at this stop");
+		teachingAreas.addEventListener("dragover", (event) => {
+			if (!tripAreaDrag || tripAreaDrag.routePlan !== routePlan
+				|| tripAreaDrag.sourceApartment === stop.primaryApartment) return;
+			event.preventDefault();
+			if (event.dataTransfer) event.dataTransfer.dropEffect = "move";
+			teachingAreas.classList.add("is-area-drop-target");
+		});
+		teachingAreas.addEventListener("dragleave", (event) => {
+			if (!teachingAreas.contains(event.relatedTarget)) teachingAreas.classList.remove("is-area-drop-target");
+		});
+		teachingAreas.addEventListener("drop", (event) => {
+			if (!tripAreaDrag || tripAreaDrag.routePlan !== routePlan
+				|| tripAreaDrag.sourceApartment === stop.primaryApartment) return;
+			event.preventDefault();
+			teachingAreas.classList.remove("is-area-drop-target");
+			const drag = tripAreaDrag;
+			const sourceEntries = routePlan.areaEntries.get(drag.sourceApartment);
+			const destinationEntries = routePlan.areaEntries.get(stop.primaryApartment);
+			if (!sourceEntries || !destinationEntries || !sourceEntries.delete(drag.entry)) return;
+			destinationEntries.add(drag.entry);
+			drag.entry.currentApartment = stop.primaryApartment;
+			tripAreaDrag = null;
+			refreshTripHouseBefore(routePlan);
+			renderTripTimeline(routePlan.route);
+		});
+		const entries = stop.apartments.flatMap((apartment) => [...(routePlan.areaEntries.get(apartment) ?? [])]);
+		if (entries.length === 0) {
+			const empty = document.createElement("p");
+			empty.className = "trip-teaching-areas-empty";
+			empty.textContent = "No teaching areas";
+			teachingAreas.append(empty);
+		}
+		for (const entry of entries) {
+			teachingAreas.append(createTripAreaChip(entry, routePlan));
+		}
+		return teachingAreas;
 	}
 
 	function createTripMissionary(missionary, stop, source, draggable = false) {
@@ -2046,14 +2190,16 @@
 	}
 
 	function moveTripMissionary(stop, missionary, source, destination) {
-		const plan = getTripRoutePlans(activeTripRoute).get(stop);
+		const plan = getTripStopPlan(getTripRoutePlans(activeTripRoute), stop);
 		if (!plan || !isTripDropAllowed(source, destination)) return;
 		if (source === "house-after") {
 			plan.houseAfter.delete(missionary);
+			plan.houseAfterOverrides.add(missionary);
 			plan.boarding.add(missionary);
 		} else if (source === "pick-up") {
 			plan.boarding.delete(missionary);
 			plan.houseAfter.add(missionary);
+			plan.houseAfterOverrides.add(missionary);
 		} else if (source === "van-after") {
 			plan.alighting.add(missionary);
 		} else if (source === "drop-off") {
@@ -2068,12 +2214,8 @@
 	}
 
 	function renderTripStop(stop, index, plans, vanBefore) {
-		let plan = plans.get(stop);
-		const houseBefore = missionaries.filter((missionary) => stop.apartments.includes(missionary.currentLoc));
-		if (!plan) {
-			plan = { houseAfter: new Set(houseBefore), boarding: new Set(), alighting: new Set() };
-			plans.set(stop, plan);
-		}
+		const plan = getTripStopPlan(plans, stop);
+		const houseBefore = [...plan.houseBefore];
 		const carriedRiders = vanBefore.filter((missionary) => !plan.alighting.has(missionary));
 		const vanAfter = [...new Set([...carriedRiders, ...plan.boarding])];
 		const primaryApartment = stop.primaryApartment;
@@ -2088,20 +2230,7 @@
 		houseLabel.textContent = "Primary apartment";
 		const houseName = document.createElement("h2");
 		houseName.textContent = primaryApartment?.name || primaryApartment?.address || "Unnamed apartment";
-		const areaList = document.createElement("ul");
-		areaList.className = "trip-area-list";
-		const areas = [...new Set(stop.apartments.flatMap((apartment) => apartment.teachingAreas))];
-		for (const area of areas) {
-			const item = document.createElement("li");
-			item.textContent = formatTripArea(area);
-			areaList.append(item);
-		}
-		if (areas.length === 0) {
-			const item = document.createElement("li");
-			item.textContent = "No teaching areas";
-			areaList.append(item);
-		}
-		house.append(houseLabel, houseName, areaList);
+		house.append(houseLabel, houseName, createTripTeachingAreas(stop, plans));
 		stopElement.append(
 			house,
 			createTripBox(stop, "house-before", "In house before", houseBefore),
@@ -2153,6 +2282,7 @@
 		}
 
 		const plans = getTripRoutePlans(selectedRoute);
+		refreshTripHouseBefore(plans);
 		let vanBefore = [];
 		for (const [index, stop] of selectedRoute.stops.entries()) {
 			const rendered = renderTripStop(stop, index, plans, vanBefore);

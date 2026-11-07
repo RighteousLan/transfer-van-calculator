@@ -1588,18 +1588,71 @@ button.map-pin:not(:disabled):hover {
 	overflow-wrap: anywhere;
 }
 
-.trip-area-list {
+.trip-teaching-areas {
+	display: flex;
 	min-height: 0;
-	margin: 0;
-	padding: 0 3px 0 0;
+	flex: 1 1 auto;
+	flex-wrap: wrap;
+	align-content: flex-start;
+	align-items: flex-start;
+	gap: 4px;
+	padding: 3px 3px 3px 0;
+	border-radius: 3px;
+	overflow-x: hidden;
 	overflow-y: auto;
-	color: var(--muted);
-	font-size: 10px;
-	line-height: 1.45;
-	list-style: none;
+	transition: background-color 120ms ease, box-shadow 120ms ease;
 }
 
-.trip-area-list li { overflow-wrap: anywhere; }
+.trip-teaching-areas.is-area-drop-target {
+	background: var(--soft-green);
+	box-shadow: inset 0 0 0 1px #89ad9b;
+}
+
+.trip-teaching-areas-empty {
+	width: 100%;
+	padding: 2px 0;
+	color: #89958d;
+	font-size: 9px;
+	font-style: italic;
+}
+
+.trip-area-chip {
+	width: auto;
+	max-width: 100%;
+	min-height: 22px;
+	justify-content: flex-start;
+	padding: 3px 5px;
+	border-color: #cbd9cf;
+	border-radius: 3px;
+	color: var(--green-dark);
+	background: #fff;
+	font-size: 9px;
+	font-weight: 600;
+	line-height: 1.2;
+	text-align: left;
+	white-space: normal;
+	overflow-wrap: anywhere;
+	cursor: grab;
+}
+
+.trip-area-chip:active { cursor: grabbing; }
+
+.trip-area-chip.is-moved {
+	border-color: #9a7abd;
+	color: #634783;
+	background: #f4eff9;
+	box-shadow: inset 0 0 0 1px rgb(119 83 155 / 12%);
+}
+
+.trip-area-chip.is-moved:hover {
+	border-color: #79589c;
+	background: #eee5f6;
+}
+
+.trip-area-chip:focus-visible {
+	outline: 2px solid #79589c;
+	outline-offset: 1px;
+}
 
 .trip-box {
 	display: flex;

@@ -11,6 +11,11 @@
 		Temporary: "Temporary",
 	});
 
+	const TripTime = Object.freeze({
+		Morning: "morning",
+		Afternoon: "afternoon",
+	});
+
 	const TransferType = Object.freeze({
 		STA: "Stay",				 //Same area before and after transfer
 		TWV: "Transfer without Van", //Same apartment index, no van needed, just a transfer
@@ -98,6 +103,7 @@
 
 	class Route {
 		name = "";
+		time = TripTime.Morning;
 		stops = [];
 		travelTimeTable = [];
 
@@ -205,15 +211,35 @@
 		positionAfter = "";
 		currentLoc = null;
 		transferType = null;
+		//pickupApartment = null;
+		//dropoffApartment = null;
 
 		getRealName() {
 			return [this.type, this.lastName].filter(Boolean).join(" ");
 		}
 	}
 
+	class TripStop {
+		teachingAreas = [];
+		inHouseBefore = [];
+		inHouseAfter = [];
+		pickUp = [];
+		dropOff = [];
+		inVanBefore = [];
+		inVanAfter = [];
+		finalTransfer = [];
+	}
+
+	class Trip {
+		name = "";
+		time = TripTime.Morning;
+		stops = [];
+	}
+
 	window.TransferVanModels = {
 		Direction,
 		MissionaryType,
+		TripTime,
 		TransferType,
 		Apartment,
 		Appartment: Apartment,
@@ -223,5 +249,7 @@
 		Stop,
 		Route,
 		Missionary,
+		TripStop,
+		Trip,
 	};
 })();
