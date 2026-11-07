@@ -1906,6 +1906,7 @@
     {
       "name": "North to Duma",
       "time": "morning",
+      "direction": "north",
       "stops": [
         {
           "primaryApartmentIndex": 4,
@@ -2945,6 +2946,7 @@
     {
       "name": "South to Duma",
       "time": "morning",
+      "direction": "south",
       "stops": [
         {
           "primaryApartmentIndex": 33,
@@ -3346,6 +3348,7 @@
     {
       "name": "Duma to North",
       "time": "afternoon",
+      "direction": "north",
       "stops": [
         {
           "primaryApartmentIndex": 65,
@@ -4394,6 +4397,7 @@
     {
       "name": "Duma to South",
       "time": "afternoon",
+      "direction": "south",
       "stops": [
         {
           "primaryApartmentIndex": 65,

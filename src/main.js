@@ -204,7 +204,13 @@
 	function defaultRouteTime(name) {
 		if (name === "Duma to North" || name === "Duma to South") return TripTime.Afternoon;
 		if (name === "North to Duma" || name === "South to Duma") return TripTime.Morning;
-		return TripTime.Morning;
+		return null;
+	}
+
+		function defaultRouteDirection(name) {
+		if (name === "Duma to North" || name === "North to Duma") return Direction.North;
+		if (name === "Duma to South" || name === "South to Duma") return Direction.South;
+		return null;
 	}
 
 	function createBuiltInRoutes() {
@@ -212,6 +218,7 @@
 			const route = new Route();
 			route.name = name;
 			route.time = defaultRouteTime(name);
+			route.direction = defaultRouteDirection(name);
 			return route;
 		});
 	}
@@ -2445,15 +2452,15 @@
 		if (beforeIndex === afterIndex) return TransferType.TWV;
 
 		if (beforeIndex > 0) {
-			if (afterIndex > beforeIndex) return TransferType.NTM;
-			if (afterIndex > 0) return TransferType.NTL;
+			if (afterIndex > beforeIndex) return TransferType.NMN;
+			if (afterIndex > 0) return TransferType.NLN;
 			if (afterIndex < 0) return TransferType.NTS;
 			if (afterIndex === 0) return TransferType.NTD;
 		}
 
 		if (beforeIndex < 0) {
-			if (afterIndex < beforeIndex) return TransferType.STM;
-			if (afterIndex < 0) return TransferType.STL;
+			if (afterIndex < beforeIndex) return TransferType.SMS;
+			if (afterIndex < 0) return TransferType.SLS;
 			if (afterIndex > 0) return TransferType.STN;
 			if (afterIndex === 0) return TransferType.STD;
 		}
