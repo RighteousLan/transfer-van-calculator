@@ -127,6 +127,7 @@
 	let departingSelection = new Map();
 	let activeTripRoute = null;
 	let tripPlansByRoute = new WeakMap();
+	const sharedAfternoonFirstStopHouseBefore = new Set();
 	let tripDrag = null;
 	let tripAreaDrag = null;
 	let editingRouteDraft = null;
@@ -2036,6 +2037,7 @@
 			const houseBefore = getTripHouseBefore(routePlan, stop);
 			plan = {
 				houseBefore,
+			houseBeforeSnapshot: new Set(houseBefore),
 				houseAfter: new Set(houseBefore),
 				houseAfterOverrides: new Set(),
 				boarding: new Set(),
@@ -2054,6 +2056,12 @@
 			morningRouteNames.has(candidate.name) && candidate.time === TripTime.Morning);
 	}
 
+	function getAfternoonRoutes() {
+		const afternoonRouteNames = new Set(["Duma to North", "Duma to South"]);
+		return routes.filter((candidate) =>
+			afternoonRouteNames.has(candidate.name) && candidate.time === TripTime.Afternoon);
+	}
+
 	function getMorningRouteFor(route) {
 		const morningRouteName = {
 			"Duma to North": "North to Duma",
@@ -2063,7 +2071,45 @@
 		return getMorningRoutes().find((candidate) => candidate.name === morningRouteName) ?? null;
 	}
 
+	function refreshSharedAfternoonFirstStopHouseBefore() {
+		const members = new Set(missionaries.filter((missionary) => !missionary.areaBefore));
+		for (const morningRoute of getMorningRoutes()) {
+			const finalStop = morningRoute.stops.at(-1);
+			if (!finalStop) continue;
+			const plan = getTripStopPlan(getTripRoutePlans(morningRoute), finalStop);
+			for (const missionary of [...plan.houseAfter, ...plan.alighting, ...plan.automaticDropOff]) {
+				members.add(missionary);
+			}
+		}
+		sharedAfternoonFirstStopHouseBefore.clear();
+		for (const missionary of members) sharedAfternoonFirstStopHouseBefore.add(missionary);
+	}
+
+	function syncSharedAfternoonFirstStopHouseAfter(afternoonRoutes) {
+		const firstStopPlans = afternoonRoutes
+			.filter((route) => route.stops[0])
+			.map((route) => ({
+				plan: getTripStopPlan(getTripRoutePlans(route), route.stops[0]),
+			}));
+
+		for (const { plan } of firstStopPlans) {
+			const otherPickUps = new Set(firstStopPlans
+				.filter((candidate) => candidate.plan !== plan)
+				.flatMap((candidate) => [...candidate.plan.boarding]));
+			for (const missionary of plan.houseBefore) {
+				if (otherPickUps.has(missionary)) {
+					plan.houseAfter.delete(missionary);
+				} else if (!plan.boarding.has(missionary) && !plan.houseAfterOverrides.has(missionary)) {
+					plan.houseAfter.add(missionary);
+				}
+			}
+		}
+	}
+
 	function getTripHouseBefore(routePlan, stop) {
+		if (routePlan.route.time === TripTime.Afternoon && routePlan.route.stops[0] === stop) {
+			return sharedAfternoonFirstStopHouseBefore;
+		}
 		let houseBefore = null;
 		if (routePlan.route.time === TripTime.Afternoon) {
 			const apartmentName = stop.primaryApartment?.name;
@@ -2086,16 +2132,6 @@
 				.map(([missionary]) => missionary));
 		}
 
-		if (routePlan.route.time === TripTime.Afternoon && routePlan.route.stops[0] === stop) {
-			for (const morningRoute of getMorningRoutes()) {
-				const finalStop = morningRoute.stops.at(-1);
-				if (!finalStop) continue;
-				const morningPlan = getTripStopPlan(getTripRoutePlans(morningRoute), finalStop);
-				for (const missionary of [...morningPlan.alighting, ...morningPlan.automaticDropOff]) {
-					houseBefore.add(missionary);
-				}
-			}
-		}
 		return houseBefore;
 	}
 
@@ -2117,6 +2153,19 @@
 		return stop.apartments.some((apartment) =>
 			[...(routePlan.areaEntries.get(apartment) ?? [])].some(({ area }) =>
 				areaNames.has(normalize(area.nameBefore)) || areaNames.has(normalize(area.nameAfter))));
+	}
+
+	function getTripHouseAfterValidation(routePlan, stop, plan) {
+		const actual = new Set([...plan.houseAfter, ...plan.alighting, ...plan.automaticDropOff]);
+		if (routePlan.route.time === TripTime.Morning) {
+			return { isInvalid: actual.size === 1, missing: [], unexpected: [] };
+		}
+
+		const expected = new Set(missionaries.filter((missionary) =>
+			missionaryAfterAreaIsAtStop(missionary, routePlan, stop)));
+		const missing = [...expected].filter((missionary) => !actual.has(missionary));
+		const unexpected = [...actual].filter((missionary) => !expected.has(missionary));		
+		return { isInvalid: missing.length > 0 || unexpected.length > 0, missing, unexpected };
 	}
 
 	function applyAutomaticTripMoves(routePlan) {
@@ -2163,8 +2212,9 @@
 	function refreshTripHouseBefore(routePlan) {
 		for (const stop of routePlan.route.stops) {
 			const plan = getTripStopPlan(routePlan, stop);
-			const nextHouseBefore = getTripHouseBefore(routePlan, stop);
-			for (const missionary of plan.houseBefore) {
+			const sharedHouseBefore = getTripHouseBefore(routePlan, stop);
+			const nextHouseBefore = new Set(sharedHouseBefore);
+			for (const missionary of plan.houseBeforeSnapshot) {
 				if (!nextHouseBefore.has(missionary) && !plan.houseAfterOverrides.has(missionary)) {
 					plan.houseAfter.delete(missionary);
 				}
@@ -2174,7 +2224,10 @@
 					plan.houseAfter.add(missionary);
 				}
 			}
-			plan.houseBefore = nextHouseBefore;
+			plan.houseBefore = routePlan.route.time === TripTime.Afternoon && routePlan.route.stops[0] === stop
+				? sharedHouseBefore
+				: nextHouseBefore;
+			plan.houseBeforeSnapshot = nextHouseBefore;
 		}
 	}
 
@@ -2358,10 +2411,30 @@
 		const houseName = document.createElement("h2");
 		houseName.textContent = primaryApartment?.name || primaryApartment?.address || "Unnamed apartment";
 		house.append(houseLabel, houseName, createTripTeachingAreas(stop, plans));
+		const houseAfterBox = createTripBox(
+			stop,
+			"house-after",
+			"In house after",
+			houseAfter,
+			draggableHouseAfter,
+			true,
+		);
+		const houseAfterValidation = getTripHouseAfterValidation(plans, stop, plan);
+		houseAfterBox.classList.toggle("is-invalid", houseAfterValidation.isInvalid);
+		if (plans.route.time === TripTime.Afternoon && houseAfterValidation.isInvalid) {
+			const formatNames = (members) => members
+				.map((missionary) => missionary.getRealName() || "Unidentified missionary")
+				.sort((first, second) => first.localeCompare(second))
+				.join(", ") || "None";
+			houseAfterBox.title = [
+				`Missing: ${formatNames(houseAfterValidation.missing)}`,
+				`Should not be here: ${formatNames(houseAfterValidation.unexpected)}`,
+			].join("\n");
+		}
 		stopElement.append(
 			house,
 			createTripBox(stop, "house-before", "In house before", houseBefore),
-			createTripBox(stop, "house-after", "In house after", houseAfter, draggableHouseAfter, true),
+			houseAfterBox,
 			createTripBox(
 				stop,
 				"pick-up",
@@ -2441,8 +2514,19 @@
 			refreshTripHouseBefore(morningPlans);
 			applyAutomaticTripMoves(morningPlans);
 		}
-		refreshTripHouseBefore(plans);
-		applyAutomaticTripMoves(plans);
+		if (selectedRoute.time === TripTime.Afternoon) refreshSharedAfternoonFirstStopHouseBefore();
+		if (selectedRoute.time === TripTime.Afternoon) {
+			const afternoonRoutes = getAfternoonRoutes();
+			for (const afternoonRoute of afternoonRoutes) {
+				const afternoonPlans = getTripRoutePlans(afternoonRoute);
+				refreshTripHouseBefore(afternoonPlans);
+				applyAutomaticTripMoves(afternoonPlans);
+			}
+			syncSharedAfternoonFirstStopHouseAfter(afternoonRoutes);
+		} else {
+			refreshTripHouseBefore(plans);
+			applyAutomaticTripMoves(plans);
+		}
 		let vanBefore = [];
 		for (const [index, stop] of selectedRoute.stops.entries()) {
 			const rendered = renderTripStop(stop, index, plans, vanBefore);

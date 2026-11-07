@@ -35,7 +35,6 @@ Add a warning at the end begging the APs to at least confirm the list of people 
 Make adjustments to the travel screen:
 -Routes should calculate who must be picked up and dropped off and place them that way, and visually identify them
 -It should really fit vertically on the screen so you don't have to scroll up and down. The letters should be larger and bolder in order to be more readable in their small state
--Obviously, every house that is left with one missionary should be red, and every house that is not the intended should be red in the afternoon
 
 
-
+Now it's time to add a next button to show the reports and emails. It might even be cool to add a feature to let you schedule send them
