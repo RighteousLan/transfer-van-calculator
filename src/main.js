@@ -2371,7 +2371,9 @@
 				"In the van after",
 				vanAfter,
 				new Set(vanAfter.filter((missionary) =>
-					!plan.automaticPickUp.has(missionary) && !plan.automaticDropOff.has(missionary))),
+					!plan.boarding.has(missionary)
+					&& !plan.automaticPickUp.has(missionary)
+					&& !plan.automaticDropOff.has(missionary))),
 				true,
 			),
 			createTripBox(stop, "van-before", "In the van before", vanBefore),
