@@ -1867,6 +1867,13 @@
 	}
 
 	function renderMissingTransferTypes() {
+		const debugNames = new Set(["Elder Emberga", "Sister Dela Cruz", "Elder Aquino", "Elder Baron"]);
+		console.table(missionaries
+			.filter((missionary) => debugNames.has(missionary.getRealName()))
+			.map((missionary) => ({
+				name: missionary.getRealName(),
+				transferType: missionary.transferType,
+			})));
 		missingTransferTypesList.replaceChildren();
 		const missing = missionaries
 			.filter((missionary) => missionary.type !== MissionaryType.Senior && missionary.transferType == null)
@@ -2032,17 +2039,105 @@
 				houseAfter: new Set(houseBefore),
 				houseAfterOverrides: new Set(),
 				boarding: new Set(),
+				automaticPickUp: new Set(),
 				alighting: new Set(),
+				automaticDropOff: new Set(),
 			};
 			routePlan.stops.set(stop, plan);
 		}
 		return plan;
 	}
 
+	function getMorningRouteFor(route) {
+		const morningRouteName = {
+			"Duma to North": "North to Duma",
+			"Duma to South": "South to Duma",
+		}[route.name];
+		if (!morningRouteName) return null;
+		return routes.find((candidate) =>
+			candidate.name === morningRouteName && candidate.time === TripTime.Morning) ?? null;
+	}
+
 	function getTripHouseBefore(routePlan, stop) {
+		if (routePlan.route.time === TripTime.Afternoon) {
+			const apartmentName = stop.primaryApartment?.name;
+			const morningRoute = getMorningRouteFor(routePlan.route);
+			const apartmentNameKey = apartmentName ? normalize(apartmentName) : "";
+			const morningStop = apartmentNameKey && morningRoute?.stops.find((candidate) =>
+				normalize(candidate.primaryApartment?.name ?? "") === apartmentNameKey);
+			if (morningRoute && morningStop) {
+				const morningPlan = getTripStopPlan(getTripRoutePlans(morningRoute), morningStop);
+				return new Set([
+					...morningPlan.houseAfter,
+					...morningPlan.alighting,
+					...morningPlan.automaticDropOff,
+				]);
+			}
+		}
 		return new Set([...routePlan.missionaryAreaEntries]
 			.filter(([, entry]) => stop.apartments.includes(entry.currentApartment))
 			.map(([missionary]) => missionary));
+	}
+
+	function automaticPickUpTypes(routeName) {
+		const typesByRoute = {
+			"North to Duma": [TransferType.NLN, TransferType.NTS, TransferType.NTD],
+			"South to Duma": [TransferType.SLS, TransferType.STN, TransferType.STD],
+			"Duma to North": [TransferType.NMN, TransferType.DTN, TransferType.STN],
+			"Duma to South": [TransferType.SMS, TransferType.DTS, TransferType.NTS],
+		};
+		return new Set(typesByRoute[routeName] ?? []);
+	}
+
+	function missionaryAfterAreaIsAtStop(missionary, routePlan, stop) {
+		if (!missionary.areaAfter) return false;
+		const areaNames = new Set([missionary.areaAfter.nameBefore, missionary.areaAfter.nameAfter]
+			.filter(Boolean)
+			.map(normalize));
+		return stop.apartments.some((apartment) =>
+			[...(routePlan.areaEntries.get(apartment) ?? [])].some(({ area }) =>
+				areaNames.has(normalize(area.nameBefore)) || areaNames.has(normalize(area.nameAfter))));
+	}
+
+	function applyAutomaticTripMoves(routePlan) {
+		for (const stop of routePlan.route.stops) {
+			const plan = getTripStopPlan(routePlan, stop);
+			for (const missionary of plan.automaticPickUp) {
+				plan.boarding.delete(missionary);
+				if (plan.houseBefore.has(missionary) && !plan.houseAfterOverrides.has(missionary)) {
+					plan.houseAfter.add(missionary);
+				}
+			}
+			plan.automaticPickUp.clear();
+			for (const missionary of plan.automaticDropOff) plan.alighting.delete(missionary);
+			plan.automaticDropOff.clear();
+		}
+
+		const pickupTypes = automaticPickUpTypes(routePlan.route.name);
+		let vanBefore = [];
+		for (const [index, stop] of routePlan.route.stops.entries()) {
+			const plan = getTripStopPlan(routePlan, stop);
+			for (const missionary of plan.houseAfter) {
+				if (!pickupTypes.has(missionary.transferType)) continue;
+				plan.houseAfter.delete(missionary);
+				plan.boarding.add(missionary);
+				plan.automaticPickUp.add(missionary);
+			}
+
+			const vanAfterBeforeDropOff = [...new Set([
+				...vanBefore.filter((missionary) => !plan.alighting.has(missionary)),
+				...plan.boarding,
+			])];
+			const automaticDropOffs = index === routePlan.route.stops.length - 1
+				? vanAfterBeforeDropOff
+				: vanAfterBeforeDropOff.filter((missionary) =>
+					vanBefore.includes(missionary) && missionaryAfterAreaIsAtStop(missionary, routePlan, stop));
+			for (const missionary of automaticDropOffs) {
+				plan.alighting.add(missionary);
+				plan.automaticDropOff.add(missionary);
+			}
+			vanBefore = vanAfterBeforeDropOff.filter((missionary) => !plan.alighting.has(missionary));
+		}
 	}
 
 	function refreshTripHouseBefore(routePlan) {
@@ -2223,8 +2318,13 @@
 	function renderTripStop(stop, index, plans, vanBefore) {
 		const plan = getTripStopPlan(plans, stop);
 		const houseBefore = [...plan.houseBefore];
-		const carriedRiders = vanBefore.filter((missionary) => !plan.alighting.has(missionary));
-		const vanAfter = [...new Set([...carriedRiders, ...plan.boarding])];
+		const houseAfter = [...new Set([...plan.houseAfter, ...plan.alighting, ...plan.automaticDropOff])];
+		const draggableHouseAfter = new Set(houseAfter.filter((missionary) =>
+			!plan.alighting.has(missionary) && !plan.automaticDropOff.has(missionary)));
+		const carriedRiders = vanBefore.filter((missionary) =>
+			!plan.alighting.has(missionary) && !plan.automaticDropOff.has(missionary));
+		const vanAfter = [...new Set([...carriedRiders, ...plan.boarding])]
+			.filter((missionary) => !plan.alighting.has(missionary) && !plan.automaticDropOff.has(missionary));
 		const primaryApartment = stop.primaryApartment;
 		const stopElement = document.createElement("article");
 		stopElement.className = "trip-stop";
@@ -2241,8 +2341,15 @@
 		stopElement.append(
 			house,
 			createTripBox(stop, "house-before", "In house before", houseBefore),
-			createTripBox(stop, "house-after", "In house after", [...plan.houseAfter], plan.houseAfter, true),
-			createTripBox(stop, "pick-up", "Get on the van", [...plan.boarding], plan.boarding, true),
+			createTripBox(stop, "house-after", "In house after", houseAfter, draggableHouseAfter, true),
+			createTripBox(
+				stop,
+				"pick-up",
+				"Get on the van",
+				[...plan.boarding],
+				new Set([...plan.boarding].filter((missionary) => !plan.automaticPickUp.has(missionary))),
+				true,
+			),
 		);
 
 		const marker = document.createElement("div");
@@ -2250,8 +2357,23 @@
 		marker.innerHTML = `<span>${index + 1}</span><small>Stop</small>`;
 		stopElement.append(
 			marker,
-			createTripBox(stop, "drop-off", "Get off the van", [...plan.alighting], plan.alighting, true),
-			createTripBox(stop, "van-after", "In the van after", vanAfter, new Set(carriedRiders), true),
+			createTripBox(
+				stop,
+				"drop-off",
+				"Get off the van",
+				[...new Set([...plan.alighting, ...plan.automaticDropOff])],
+				new Set([...plan.alighting].filter((missionary) => !plan.automaticDropOff.has(missionary))),
+				true,
+			),
+			createTripBox(
+				stop,
+				"van-after",
+				"In the van after",
+				vanAfter,
+				new Set(vanAfter.filter((missionary) =>
+					!plan.automaticPickUp.has(missionary) && !plan.automaticDropOff.has(missionary))),
+				true,
+			),
 			createTripBox(stop, "van-before", "In the van before", vanBefore),
 		);
 
@@ -2289,7 +2411,14 @@
 		}
 
 		const plans = getTripRoutePlans(selectedRoute);
+		const morningRoute = getMorningRouteFor(selectedRoute);
+		if (morningRoute) {
+			const morningPlans = getTripRoutePlans(morningRoute);
+			refreshTripHouseBefore(morningPlans);
+			applyAutomaticTripMoves(morningPlans);
+		}
 		refreshTripHouseBefore(plans);
+		applyAutomaticTripMoves(plans);
 		let vanBefore = [];
 		for (const [index, stop] of selectedRoute.stops.entries()) {
 			const rendered = renderTripStop(stop, index, plans, vanBefore);
@@ -2442,6 +2571,7 @@
 	}
 
 	function calculateTransferType(missionary) {
+
 		const beforeArea = missionary.areaBefore;
 		const afterArea = missionary.areaAfter;
 		if (!afterArea || afterArea.index === null || (beforeArea && beforeArea.index === null)) return null;
