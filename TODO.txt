@@ -37,4 +37,12 @@ Make adjustments to the travel screen:
 -It should really fit vertically on the screen so you don't have to scroll up and down. The letters should be larger and bolder in order to be more readable in their small state
 
 
-Now it's time to add a next button to show the reports and emails. It might even be cool to add a feature to let you schedule send them
+call view:
+Need to add trainer detection.
+2nd trainers might be possible by reading companions and marking all trainee pa tawo if their comp has (TR) or (ZL, TR), (STL, TR), (DL, TR)
+Maybe I'll have to keep the companion before and after in order to do this.
+OKOK
+Keep a list of trainers and secondTrainers. fill the list after reading data from the two files
+
+
+In the real name function, add a feature to account for people with the same last name like anderson and anderson

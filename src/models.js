@@ -212,12 +212,14 @@
 		positionAfter = "";
 		currentLoc = null;
 		transferType = null;
+		compBefore = ""
+		compAfter = ""
 		//pickupApartment = null;
 		//dropoffApartment = null;
 
 		getRealName() {
 			return [this.type, this.lastName].filter(Boolean).join(" ");
-		}
+		} //TODO: handle duplicate last names on missionary creation from files.
 	}
 
 	class TripStop {

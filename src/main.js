@@ -29,6 +29,9 @@
 	const verifyView = requireElement("verify-view");
 	const printView = requireElement("print-view");
 	const callView = requireElement("call-view");
+	const callZoneSelect = requireElement("call-zone-select");
+	const callZoneEmpty = requireElement("call-zone-empty");
+	const callZoneOutput = requireElement("call-zone-output");
 	const nextScreenButton = requireElement("next-screen");
 	const tripRouteSelect = requireElement("trip-route-select");
 	const tripRouteEmpty = requireElement("trip-route-empty");
@@ -222,6 +225,7 @@
 	});
 
 	requireElement("next-to-call").addEventListener("click", () => {
+		renderCallView();
 		printView.hidden = true;
 		callView.hidden = false;
 		window.scrollTo(0, 0);
@@ -243,6 +247,8 @@
 		const route = routes[Number(printRouteSelect.value)];
 		renderTripTimeline(route ?? null);
 	});
+
+	callZoneSelect.addEventListener("change", renderCallZoneTable);
 
 	let printResizeStart = null;
 	printRouteResize.addEventListener("pointerdown", (event) => {
@@ -1874,6 +1880,147 @@
 		updateWorkflowButtons();
 	}
 
+	function callTransferMessage(transferType) {
+		const messages = new Map([
+			[TransferType.STA, "STAY"],
+			[TransferType.TWV, "TRANSFER without van"],
+			[TransferType.NMN, "TRANSFER van going north"],
+			[TransferType.SLS, "TRANSFER van going north"],
+			[TransferType.STN, "TRANSFER van going north"],
+			[TransferType.STD, "TRANSFER van going north"],
+			[TransferType.DTN, "TRANSFER van going north"],
+			[TransferType.DTS, "TRANSFER van going south"],
+			[TransferType.NLN, "TRANSFER van going south"],
+			[TransferType.NTS, "TRANSFER van going south"],
+			[TransferType.NTD, "TRANSFER van going south"],
+			[TransferType.SMS, "TRANSFER van going south"],
+			[TransferType.ULI, "uli na"],
+		]);
+		return messages.get(transferType) ?? "Not set";
+	}
+
+	function positionRoles(position) {
+		const roles = new Set();
+		const roleCodes = new Map([
+			["STL", new Set(["stlsc", "stljc", "stl", "stl1"])],
+			["ZL", new Set(["zlsc", "zljc", "zl", "zl1"])],
+			["DL", new Set(["dlsc", "dltr", "dl"])],
+		]);
+		for (const match of String(position ?? "").matchAll(/\(([^)]*)\)/g)) {
+			const code = normalize(match[1]);
+			for (const [role, codes] of roleCodes) {
+				if (codes.has(code)) roles.add(role);
+			}
+		}
+		return roles;
+	}
+
+	function callRoleNote(missionary) {
+		const beforeRoles = positionRoles(missionary.positionBefore);
+		if (beforeRoles.has("ZL")) return "";
+		const afterRoles = positionRoles(missionary.positionAfter);
+		if (afterRoles.has("DL") && !beforeRoles.has("DL")) return "New District Leader";
+		if (afterRoles.has("STL") && !beforeRoles.has("STL")) return "New STL";
+		if (afterRoles.has("ZL") && !beforeRoles.has("ZL")) return "New Zone Leader";
+		return "";
+	}
+
+	function renderCallView() {
+		const selectedZone = callZoneSelect.value === "" ? null : zones[Number(callZoneSelect.value)] ?? null;
+		const beforeZones = zones.filter((zone) => zone.nameBefore);
+		callZoneSelect.replaceChildren();
+		const placeholder = document.createElement("option");
+		placeholder.value = "";
+		placeholder.textContent = beforeZones.length ? "Select a zone" : "No zones available";
+		callZoneSelect.append(placeholder);
+		for (const [index, zone] of zones.entries()) {
+			if (!zone.nameBefore) continue;
+			const option = document.createElement("option");
+			option.value = String(index);
+			option.textContent = zone.nameBefore;
+			callZoneSelect.append(option);
+		}
+		const selectedIndex = selectedZone ? zones.indexOf(selectedZone) : -1;
+		callZoneSelect.value = selectedIndex >= 0 ? String(selectedIndex) : "";
+		callZoneSelect.disabled = beforeZones.length === 0;
+		callZoneEmpty.hidden = beforeZones.length > 0;
+		callZoneOutput.hidden = beforeZones.length === 0;
+		renderCallZoneTable();
+	}
+
+	function renderCallZoneTable() {
+		callZoneOutput.replaceChildren();
+		const zone = callZoneSelect.value === "" ? null : zones[Number(callZoneSelect.value)];
+		if (!zone) {
+			const empty = document.createElement("p");
+			empty.className = "empty-state";
+			empty.textContent = "Select a zone to view its missionaries.";
+			callZoneOutput.append(empty);
+			return;
+		}
+
+		const table = document.createElement("table");
+		table.className = "call-table";
+		const headers = ["District", "Area", "Missionary", "Transfer", "Notes"];
+		const head = document.createElement("thead");
+		const headingRow = document.createElement("tr");
+		for (const label of headers) {
+			const cell = document.createElement("th");
+			cell.scope = "col";
+			cell.textContent = label;
+			headingRow.append(cell);
+		}
+		head.append(headingRow);
+		table.append(head);
+
+		const body = document.createElement("tbody");
+		for (const district of zone.districts.filter((entry) => entry.nameBefore)) {
+			const beforeAreas = district.areas.filter((area) => area.nameBefore);
+			const areaRows = beforeAreas.flatMap((area) => {
+				const assigned = missionaries.filter((missionary) => missionary.areaBefore === area);
+				return assigned.length ? assigned.map((missionary) => ({ area, missionary })) : [{ area, missionary: null }];
+			});
+			const rows = areaRows.length ? areaRows : [{ area: null, missionary: null }];
+			rows.forEach(({ area, missionary }, index) => {
+				const row = document.createElement("tr");
+				if (index === 0) {
+					const districtCell = document.createElement("th");
+					districtCell.scope = "rowgroup";
+					districtCell.rowSpan = rows.length;
+					districtCell.textContent = district.nameBefore || "Unnamed district";
+					row.append(districtCell);
+				}
+				if (!area || index === 0 || rows[index - 1].area !== area) {
+					const areaCell = document.createElement("th");
+					areaCell.scope = "rowgroup";
+					areaCell.rowSpan = area
+						? Math.max(1, areaRows.filter((entry) => entry.area === area).length)
+						: 1;
+					areaCell.textContent = area?.nameBefore || "—";
+					row.append(areaCell);
+				}
+				const nameCell = document.createElement("td");
+				nameCell.textContent = missionary?.getRealName() || "—";
+				const transferCell = document.createElement("td");
+				transferCell.textContent = missionary ? callTransferMessage(missionary.transferType) : "—";
+				const notesCell = document.createElement("td");
+				notesCell.textContent = missionary ? callRoleNote(missionary) : "";
+				row.append(nameCell, transferCell, notesCell);
+				body.append(row);
+			});
+		}
+		if (zone.districts.length === 0) {
+			const row = document.createElement("tr");
+			const cell = document.createElement("td");
+			cell.colSpan = headers.length;
+			cell.textContent = "No districts in this zone.";
+			row.append(cell);
+			body.append(row);
+		}
+		table.append(body);
+		callZoneOutput.append(table);
+	}
+
 	function normalize(value) {
 		return value.toLocaleLowerCase().replace(/[^a-z0-9]/g, "");
 	}
@@ -2829,6 +2976,11 @@
 			district: readField(row, periodAliases("district", period)),
 			area: readField(row, periodAliases("area", period)),
 			position: readField(row, periodAliases("position", period)),
+			companion: readField(row, [
+				...periodAliases("companion", period),
+				...periodAliases("companions", period),
+				...periodAliases("companion name", period),
+			]),
 		};
 	}
 
@@ -2984,12 +3136,14 @@
 			if (period === "before") {
 				missionary.areaBefore = area;
 				missionary.positionBefore = assignment.position;
+				missionary.compBefore = assignment.companion;
 				const areaKey = normalize(assignment.area);
 				missionary.currentLoc = apartments.find((apartment) => apartment.teachingAreas.some((teachingArea) =>
 					normalize(teachingArea.nameBefore) === areaKey || normalize(teachingArea.nameAfter) === areaKey)) ?? null;
 			} else {
 				missionary.areaAfter = area;
 				missionary.positionAfter = assignment.position;
+				missionary.compAfter = assignment.companion;
 				missionary.transferType = calculateTransferType(missionary);
 			}
 		}

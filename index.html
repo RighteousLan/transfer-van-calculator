@@ -180,6 +180,17 @@
 					Back
 				</button>
 			</nav>
+			<header class="trip-timeline-header call-header">
+				<div>
+					<p class="eyebrow">Trip planning</p>
+					<h1>Call list</h1>
+				</div>
+				<label class="trip-route-field" for="call-zone-select">Zone
+					<select id="call-zone-select"></select>
+				</label>
+			</header>
+			<div class="trip-route-empty" id="call-zone-empty" hidden>No zones are available. Upload the before transfer board to build a call list.</div>
+			<div class="call-table-scroll" id="call-zone-output" aria-live="polite"></div>
 		</main>
 	</div>
 	<main id="routes-view" class="routes-view" aria-label="Define default routes" hidden>
