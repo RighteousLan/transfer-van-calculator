@@ -1,5 +1,6 @@
 (() => {
 	const {
+		Direction,
 		Apartment,
 		Area,
 		District,
@@ -25,6 +26,9 @@
 	const homeView = requireElement("home-view");
 	const tripView = requireElement("trip-view");
 	const nextView = requireElement("next-view");
+	const verifyView = requireElement("verify-view");
+	const printView = requireElement("print-view");
+	const callView = requireElement("call-view");
 	const nextScreenButton = requireElement("next-screen");
 	const tripRouteSelect = requireElement("trip-route-select");
 	const tripRouteEmpty = requireElement("trip-route-empty");
@@ -155,6 +159,9 @@
 		homeView.hidden = true;
 		tripView.hidden = false;
 		nextView.hidden = true;
+		verifyView.hidden = true;
+		printView.hidden = true;
+		callView.hidden = true;
 		window.scrollTo(0, 0);
 	});
 
@@ -178,6 +185,42 @@
 	requireElement("back-to-trip").addEventListener("click", () => {
 		nextView.hidden = true;
 		tripView.hidden = false;
+		window.scrollTo(0, 0);
+	});
+
+	requireElement("next-to-verify").addEventListener("click", () => {
+		nextView.hidden = true;
+		verifyView.hidden = false;
+		window.scrollTo(0, 0);
+	});
+
+	requireElement("back-to-next").addEventListener("click", () => {
+		verifyView.hidden = true;
+		nextView.hidden = false;
+		window.scrollTo(0, 0);
+	});
+
+	requireElement("next-to-print").addEventListener("click", () => {
+		verifyView.hidden = true;
+		printView.hidden = false;
+		window.scrollTo(0, 0);
+	});
+
+	requireElement("back-to-verify").addEventListener("click", () => {
+		printView.hidden = true;
+		verifyView.hidden = false;
+		window.scrollTo(0, 0);
+	});
+
+	requireElement("next-to-call").addEventListener("click", () => {
+		printView.hidden = true;
+		callView.hidden = false;
+		window.scrollTo(0, 0);
+	});
+
+	requireElement("back-to-print").addEventListener("click", () => {
+		callView.hidden = true;
+		printView.hidden = false;
 		window.scrollTo(0, 0);
 	});
 
@@ -354,6 +397,10 @@
 	}
 
 	async function loadRootTravelsJson() {
+		if (window.location.protocol === "file:") {
+			defaultsSaveStatus.textContent = "Open JSON to load travels.json when opening this file directly.";
+			return false;
+		}
 		const response = await fetch("./travels.json", { cache: "no-store" });
 		if (!response.ok) return false;
 		replaceDefaultData(await response.json());

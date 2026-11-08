@@ -27,7 +27,7 @@ body {
 .shell {
 	width: min(100% - 40px, 1040px);
 	margin: 0 auto;
-	padding: 34px 0 72px;
+	padding: 32px 0 32px;
 }
 
 .topline {
@@ -57,7 +57,7 @@ body {
 	font-weight: 600;
 }
 
-main { padding-top: clamp(54px, 10vh, 104px); }
+/*main { padding-top: clamp(54px, 10vh, 104px); }*/
 
 .eyebrow {
 	margin: 0 0 16px;
@@ -146,7 +146,7 @@ button svg, .upload-button svg { width: 17px; height: 17px; }
 
 [hidden] { display: none !important; }
 
-.trip-main { padding-top: 48px; }
+/*.trip-main { padding-top: 48px; }*/
 
 .trip-main h1 { font-size: clamp(38px, 6vw, 56px); }
 
@@ -1540,8 +1540,15 @@ button.map-pin:not(:disabled):hover {
 		"marker marker"
 		"drop-off drop-off"
 		"van-after van-after"
-		"van-before van-pic";
-	grid-template-rows: 164px 132px 132px 50px 132px 132px 96px;
+		"van-before van-pic";/**/
+	/*grid-template-areas:
+		"house house-before"
+		"pick-up house-after"
+		"marker marker"
+		"drop-off van-after"
+		"van-before van-pic";/**/
+	grid-template-rows: 164px 132px 132px 50px 132px 132px 96px;/**/
+	/*grid-template-rows: 164px 132px 50px 132px 96px;/**/
 	gap: 10px 12px;
 	padding: 12px 0 20px;
 }
