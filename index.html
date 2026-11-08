@@ -153,6 +153,25 @@
 					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6" /></svg>
 				</button>
 			</nav>
+			<header class="trip-timeline-header print-timeline-header">
+				<div>
+					<p class="eyebrow">Trip planning</p>
+					<h1>Print timeline</h1>
+				</div>
+				<label class="trip-route-field" for="print-route-select">Route
+					<select id="print-route-select"></select>
+				</label>
+			</header>
+			<div class="trip-route-empty" id="print-route-empty" hidden>No routes are available. Add a route in Default routes to build a trip timeline.</div>
+			<section class="print-route-frame" id="print-route-frame" aria-labelledby="print-route-name">
+				<header class="print-route-heading">
+					<h2 id="print-route-name"></h2>
+				</header>
+				<div class="print-timeline-viewport" id="print-timeline-viewport" aria-label="Printable trip stops">
+					<div class="print-timeline" id="print-timeline"></div>
+				</div>
+				<div class="print-route-resize-handle" id="print-route-resize" role="slider" tabindex="0" aria-label="Route box width" aria-orientation="horizontal" aria-valuemin="320" aria-valuemax="0" aria-valuenow="0" title="Drag to resize route box"></div>
+			</section>
 		</main>
 		<main id="call-view" class="trip-main next-main" hidden>
 			<nav class="trip-navigation" aria-label="Trip steps">

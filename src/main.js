@@ -33,6 +33,13 @@
 	const tripRouteSelect = requireElement("trip-route-select");
 	const tripRouteEmpty = requireElement("trip-route-empty");
 	const tripTimeline = requireElement("trip-timeline");
+	const tripTimelineViewport = requireElement("trip-timeline-viewport");
+	const printRouteSelect = requireElement("print-route-select");
+	const printRouteEmpty = requireElement("print-route-empty");
+	const printRouteName = requireElement("print-route-name");
+	const printRouteFrame = requireElement("print-route-frame");
+	const printRouteResize = requireElement("print-route-resize");
+	const printTimeline = requireElement("print-timeline");
 	const routesView = requireElement("routes-view");
 	const routeListView = requireElement("route-list-view");
 	const routeEditorView = requireElement("route-editor-view");
@@ -201,8 +208,10 @@
 	});
 
 	requireElement("next-to-print").addEventListener("click", () => {
+		renderTripTimeline(activeTripRoute);
 		verifyView.hidden = true;
 		printView.hidden = false;
+		updatePrintRouteResizeValue();
 		window.scrollTo(0, 0);
 	});
 
@@ -221,6 +230,7 @@
 	requireElement("back-to-print").addEventListener("click", () => {
 		callView.hidden = true;
 		printView.hidden = false;
+		updatePrintRouteResizeValue();
 		window.scrollTo(0, 0);
 	});
 
@@ -228,6 +238,72 @@
 		const route = routes[Number(tripRouteSelect.value)];
 		renderTripTimeline(route ?? null);
 	});
+
+	printRouteSelect.addEventListener("change", () => {
+		const route = routes[Number(printRouteSelect.value)];
+		renderTripTimeline(route ?? null);
+	});
+
+	let printResizeStart = null;
+	printRouteResize.addEventListener("pointerdown", (event) => {
+		if (event.button !== 0) return;
+		event.preventDefault();
+		const limits = getPrintRouteWidthLimits();
+		printResizeStart = {
+			pointerId: event.pointerId,
+			startX: event.clientX,
+			startWidth: printRouteFrame.getBoundingClientRect().width,
+			limits,
+		};
+		printRouteResize.setPointerCapture(event.pointerId);
+	});
+	printRouteResize.addEventListener("pointermove", (event) => {
+		if (!printResizeStart || event.pointerId !== printResizeStart.pointerId) return;
+		setPrintRouteFrameWidth(
+			printResizeStart.startWidth + event.clientX - printResizeStart.startX,
+			printResizeStart.limits,
+		);
+	});
+	printRouteResize.addEventListener("pointerup", finishPrintRouteResize);
+	printRouteResize.addEventListener("pointercancel", finishPrintRouteResize);
+	printRouteResize.addEventListener("keydown", (event) => {
+		const limits = getPrintRouteWidthLimits();
+		const currentWidth = printRouteFrame.getBoundingClientRect().width;
+		if (event.key === "ArrowLeft") setPrintRouteFrameWidth(currentWidth - 24, limits);
+		else if (event.key === "ArrowRight") setPrintRouteFrameWidth(currentWidth + 24, limits);
+		else if (event.key === "Home") setPrintRouteFrameWidth(limits.maxWidth, limits);
+		else if (event.key === "End") setPrintRouteFrameWidth(limits.minWidth, limits);
+		else return;
+		event.preventDefault();
+	});
+	window.addEventListener("resize", () => {
+		if (printRouteFrame.style.width) {
+			setPrintRouteFrameWidth(Number.parseFloat(printRouteFrame.style.width), getPrintRouteWidthLimits());
+		}
+	});
+
+	function getPrintRouteWidthLimits() {
+		const maxWidth = printRouteFrame.parentElement.clientWidth;
+		return { minWidth: Math.min(320, maxWidth), maxWidth };
+	}
+
+	function updatePrintRouteResizeValue() {
+		setPrintRouteFrameWidth(printRouteFrame.getBoundingClientRect().width, getPrintRouteWidthLimits());
+	}
+
+	function setPrintRouteFrameWidth(width, limits) {
+		const boundedWidth = Math.max(limits.minWidth, Math.min(limits.maxWidth, width));
+		printRouteFrame.style.width = `${boundedWidth}px`;
+		printRouteResize.setAttribute("aria-valuemin", String(Math.round(limits.minWidth)));
+		printRouteResize.setAttribute("aria-valuemax", String(Math.round(limits.maxWidth)));
+		printRouteResize.setAttribute("aria-valuenow", String(Math.round(boundedWidth)));
+		printRouteResize.setAttribute("aria-valuetext", `${Math.round(boundedWidth)} pixels`);
+	}
+
+	function finishPrintRouteResize(event) {
+		if (!printResizeStart || event.pointerId !== printResizeStart.pointerId) return;
+		printResizeStart = null;
+	}
 
 	function setSidebarOpen(isOpen) {
 		routesSidebar.classList.toggle("is-open", isOpen);
@@ -1602,6 +1678,21 @@
 		const factor = event.deltaY < 0 ? 1.15 : 1 / 1.15;
 		changeMapScale(mapScale * factor, event.clientX - bounds.left, event.clientY - bounds.top);
 	}, { passive: false });
+	tripTimelineViewport.addEventListener("wheel", (event) => {
+		const list = event.target instanceof Element
+			? event.target.closest(".trip-box-list, .trip-teaching-areas")
+			: null;
+		if (list && event.deltaY !== 0) {
+			const canScrollList = event.deltaY < 0
+				? list.scrollTop > 0
+				: list.scrollTop + list.clientHeight < list.scrollHeight;
+			if (canScrollList) return;
+		}
+		const delta = event.deltaX || event.deltaY;
+		if (delta === 0) return;
+		event.preventDefault();
+		tripTimelineViewport.scrollLeft += delta;
+	}, { passive: false });
 	overviewMap.addEventListener("load", () => fitOverviewMap(routesView.hidden === false));
 	window.addEventListener("resize", () => {
 		if (!routesView.hidden) fitOverviewMap();
@@ -2533,22 +2624,35 @@
 			: (routes.includes(activeTripRoute) ? activeTripRoute : routes[0] ?? null);
 		activeTripRoute = selectedRoute;
 		tripRouteSelect.replaceChildren();
+		printRouteSelect.replaceChildren();
 		for (const [index, candidate] of routes.entries()) {
-			const option = document.createElement("option");
-			option.value = String(index);
-			option.textContent = candidate.name || `Route ${index + 1}`;
-			option.selected = candidate === selectedRoute;
-			tripRouteSelect.append(option);
+			for (const select of [tripRouteSelect, printRouteSelect]) {
+				const option = document.createElement("option");
+				option.value = String(index);
+				option.textContent = candidate.name || `Route ${index + 1}`;
+				select.append(option);
+			}
+		}
+		if (selectedRoute) {
+			const selectedIndex = String(routes.indexOf(selectedRoute));
+			tripRouteSelect.value = selectedIndex;
+			printRouteSelect.value = selectedIndex;
 		}
 		tripRouteSelect.disabled = routes.length === 0;
+		printRouteSelect.disabled = routes.length === 0;
 		tripRouteEmpty.hidden = routes.length > 0;
+		printRouteEmpty.hidden = routes.length > 0;
 		tripTimeline.replaceChildren();
-		if (!selectedRoute) return;
+		if (!selectedRoute) {
+			renderPrintTimeline(null);
+			return;
+		}
 		if (selectedRoute.stops.length === 0) {
 			const empty = document.createElement("p");
 			empty.className = "trip-timeline-empty";
 			empty.textContent = "This route has no stops yet.";
 			tripTimeline.append(empty);
+			renderPrintTimeline(selectedRoute);
 			return;
 		}
 
@@ -2580,6 +2684,87 @@
 			tripTimeline.append(rendered.element);
 			vanBefore = rendered.vanAfter;
 		}
+		renderPrintTimeline(selectedRoute, plans);
+	}
+
+	function renderPrintTimeline(route, plans = null) {
+		printTimeline.replaceChildren();
+		printRouteName.textContent = route?.name || "Route";
+		if (!route) return;
+		if (route.stops.length === 0) {
+			const empty = document.createElement("p");
+			empty.className = "trip-timeline-empty";
+			empty.textContent = "This route has no stops yet.";
+			printTimeline.append(empty);
+			return;
+		}
+
+		for (const [index, stop] of route.stops.entries()) {
+			const plan = getTripStopPlan(plans ?? getTripRoutePlans(route), stop);
+			const pickUps = [...plan.boarding];
+			const dropOffs = [...new Set([...plan.alighting, ...plan.automaticDropOff])];
+			const isMissionOffice = (route.time === TripTime.Morning && index === route.stops.length - 1)
+				|| (route.time === TripTime.Afternoon && index === 0);
+			const officeMembers = route.time === TripTime.Morning ? dropOffs : pickUps;
+			if (isMissionOffice ? officeMembers.length === 0 : pickUps.length === 0 && dropOffs.length === 0) continue;
+
+			const apartment = stop.primaryApartment;
+			const card = document.createElement("article");
+			card.className = "print-stop";
+			if (isMissionOffice) card.classList.add("print-stop-mission-office");
+			const heading = document.createElement("header");
+			heading.className = "print-stop-header";
+			const details = document.createElement("div");
+			details.className = "print-stop-details";
+			const phone = document.createElement("span");
+			phone.textContent = apartment?.phoneNumbers.join(",\n") ?? "";
+			const time = document.createElement("span");
+			time.className = "print-stop-time";
+			time.textContent = " ";
+			const name = document.createElement("h2");
+			name.textContent = apartment?.name || apartment?.address || "Unnamed apartment";
+			details.append(phone, time);
+			heading.append(details, name);
+
+			const columns = document.createElement("div");
+			columns.className = "print-stop-columns";
+			if (isMissionOffice) {
+				const heading = document.createElement("h3");
+				heading.className = "print-stop-columns-heading";
+				heading.textContent = route.time === TripTime.Morning ? "Drop Off" : "Pick Up";
+				const midpoint = Math.ceil(officeMembers.length / 2);
+				columns.append(
+					heading,
+					createPrintColumn("", officeMembers.slice(0, midpoint)),
+					createPrintColumn("", officeMembers.slice(midpoint)),
+				);
+			} else {
+				columns.append(
+					createPrintColumn("Pick Up", pickUps),
+					createPrintColumn("Drop Off", dropOffs),
+				);
+			}
+			card.append(heading, columns);
+			printTimeline.append(card);
+		}
+	}
+
+	function createPrintColumn(title, missionariesAtStop) {
+		const column = document.createElement("section");
+		column.className = "print-stop-column";
+		const list = document.createElement("ul");
+		for (const missionary of missionariesAtStop) {
+			const item = document.createElement("li");
+			item.textContent = missionary.getRealName() || "Unidentified missionary";
+			list.append(item);
+		}
+		if (title) {
+			const heading = document.createElement("h3");
+			heading.textContent = title;
+			column.append(heading);
+		}
+		column.append(list);
+		return column;
 	}
 
 	function readField(row, aliases) {
