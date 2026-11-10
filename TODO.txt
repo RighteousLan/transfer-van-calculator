@@ -38,11 +38,13 @@ Make adjustments to the travel screen:
 
 
 call view:
-Need to add trainer detection.
-2nd trainers might be possible by reading companions and marking all trainee pa tawo if their comp has (TR) or (ZL, TR), (STL, TR), (DL, TR)
-Maybe I'll have to keep the companion before and after in order to do this.
-OKOK
-Keep a list of trainers and secondTrainers. fill the list after reading data from the two files
-
+Add buttons to edit notes.
+Add emailing functionality. (list to enter emails for each zone)
+    Mark in the dropdown menu if their email is ready.
+    maybe add a group send time.
+Add a note at the bottom for the email.
 
 In the real name function, add a feature to account for people with the same last name like anderson and anderson
+
+
+Alter the navigation bar to be at the top kinda like the drivers qualification thing.

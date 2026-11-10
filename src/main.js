@@ -1925,6 +1925,28 @@
 		return "";
 	}
 
+	function companionNameKeys(companions) {
+		return String(companions ?? "")
+			.split("/")
+			.map((entry) => normalize(entry.replace(/\s*\([^)]*\)\s*$/, "").trim()))
+			.filter(Boolean);
+	}
+
+	function missionaryNameKeys(missionary) {
+		return [
+			missionary.getRealName(),
+			[missionary.type, missionary.firstName, missionary.lastName].filter(Boolean).join(" "),
+			[missionary.firstName, missionary.lastName].filter(Boolean).join(" "),
+			[missionary.lastName, missionary.firstName].filter(Boolean).join(", "),
+		].map(normalize).filter(Boolean);
+	}
+
+	function trainerNameKeys() {
+		return new Set(missionaries
+			.filter((missionary) => !missionary.areaBefore)
+			.flatMap((missionary) => companionNameKeys(missionary.compAfter)));
+	}
+
 	function renderCallView() {
 		const selectedZone = callZoneSelect.value === "" ? null : zones[Number(callZoneSelect.value)] ?? null;
 		const beforeZones = zones.filter((zone) => zone.nameBefore);
@@ -1974,6 +1996,7 @@
 		table.append(head);
 
 		const body = document.createElement("tbody");
+		const trainerNames = trainerNameKeys();
 		for (const district of zone.districts.filter((entry) => entry.nameBefore)) {
 			const beforeAreas = district.areas.filter((area) => area.nameBefore);
 			const areaRows = beforeAreas.flatMap((area) => {
@@ -2004,7 +2027,13 @@
 				const transferCell = document.createElement("td");
 				transferCell.textContent = missionary ? callTransferMessage(missionary.transferType) : "—";
 				const notesCell = document.createElement("td");
-				notesCell.textContent = missionary ? callRoleNote(missionary) : "";
+				if (missionary) {
+					const notes = [callRoleNote(missionary)];
+					if (missionaryNameKeys(missionary).some((name) => trainerNames.has(name))) {
+						notes.push("Training a new missionary");
+					}
+					notesCell.textContent = notes.filter(Boolean).join("; ");
+				}
 				row.append(nameCell, transferCell, notesCell);
 				body.append(row);
 			});
