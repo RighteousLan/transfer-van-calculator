@@ -32,7 +32,6 @@
 	const callZoneSelect = requireElement("call-zone-select");
 	const callZoneEmpty = requireElement("call-zone-empty");
 	const callZoneOutput = requireElement("call-zone-output");
-	const nextScreenButton = requireElement("next-screen");
 	const tripRouteSelect = requireElement("trip-route-select");
 	const tripRouteEmpty = requireElement("trip-route-empty");
 	const tripTimeline = requireElement("trip-timeline");
@@ -165,78 +164,88 @@
 	let panStartScrollTop = 0;
 	let panMoved = false;
 
-	requireElement("new-trip").addEventListener("click", () => {
-		homeView.hidden = true;
-		tripView.hidden = false;
-		nextView.hidden = true;
-		verifyView.hidden = true;
-		printView.hidden = true;
-		callView.hidden = true;
-		window.scrollTo(0, 0);
-	});
+	const appViews = [homeView, tripView, nextView, verifyView, printView, callView];
+	const viewByTarget = new Map([
+		["home", homeView],
+		["trip", tripView],
+		["next", nextView],
+		["verify", verifyView],
+		["print", printView],
+		["call", callView],
+	]);
+	const viewNavigationMenus = document.querySelectorAll(".view-navigation");
+	const viewNavigationButtons = document.querySelectorAll(".view-navigation [data-view-target]");
+	const viewMenuToggles = document.querySelectorAll(".view-menu-toggle");
+	const tripNavigationButtons = document.querySelectorAll('.view-navigation [data-view-target="trip"]');
+	const stopsNavigationButtons = document.querySelectorAll('.view-navigation [data-view-target="next"]');
+	const gatedViewButtons = document.querySelectorAll(
+		'.view-navigation [data-view-target="next"], .view-navigation [data-view-target="verify"], .view-navigation [data-view-target="print"], .view-navigation [data-view-target="call"]',
+	);
+	gatedViewButtons.forEach((button) => { button.disabled = true; });
 
-	requireElement("back-to-home").addEventListener("click", () => {
-		tripView.hidden = true;
-		nextView.hidden = true;
-		homeView.hidden = false;
-		window.scrollTo(0, 0);
-	});
+	function updateViewNavigation(target) {
+		for (const button of viewNavigationButtons) {
+			if (button.dataset.viewTarget === target) button.setAttribute("aria-current", "page");
+			else button.removeAttribute("aria-current");
+		}
+	}
+	updateViewNavigation("home");
 
-	nextScreenButton.addEventListener("click", async () => {
-		if (nextScreenButton.disabled) return;
-		await defaultsInitialization;
-		//Here
-		renderTripTimeline();
-		tripView.hidden = true;
-		nextView.hidden = false;
-		window.scrollTo(0, 0);
-	});
+	function closeViewMenus() {
+		for (const navigation of viewNavigationMenus) navigation.classList.remove("is-open");
+		for (const toggle of viewMenuToggles) {
+			toggle.setAttribute("aria-expanded", "false");
+			toggle.setAttribute("aria-label", "Open views menu");
+			toggle.title = "Open views menu";
+		}
+	}
 
-	requireElement("back-to-trip").addEventListener("click", () => {
-		nextView.hidden = true;
-		tripView.hidden = false;
-		window.scrollTo(0, 0);
-	});
+	for (const toggle of viewMenuToggles) {
+		toggle.addEventListener("click", () => {
+			const navigation = toggle.closest(".view-navigation");
+			const shouldOpen = !navigation.classList.contains("is-open");
+			closeViewMenus();
+			if (!shouldOpen) return;
+			navigation.classList.add("is-open");
+			toggle.setAttribute("aria-expanded", "true");
+			toggle.setAttribute("aria-label", "Close views menu");
+			toggle.title = "Close views menu";
+		});
+	}
 
-	requireElement("next-to-verify").addEventListener("click", () => {
-		nextView.hidden = true;
-		verifyView.hidden = false;
-		window.scrollTo(0, 0);
-	});
+	async function showAppView(target) {
+		closeViewMenus();
+		if (target === "routes") {
+			await defaultsInitialization;
+			appViews.forEach((view) => { view.hidden = true; });
+			routesView.hidden = false;
+			setSidebarOpen(false);
+			updateViewNavigation(null);
+			window.requestAnimationFrame(() => fitOverviewMap(true));
+			window.scrollTo(0, 0);
+			return;
+		}
 
-	requireElement("back-to-next").addEventListener("click", () => {
-		verifyView.hidden = true;
-		nextView.hidden = false;
-		window.scrollTo(0, 0);
-	});
+		const destination = viewByTarget.get(target);
+		if (!destination) return;
+		if (target === "next" || target === "print") await defaultsInitialization;
+		if (target === "next") renderTripTimeline();
+		if (target === "print") {
+			renderTripTimeline(activeTripRoute);
+			updatePrintRouteResizeValue();
+		}
+		if (target === "call") renderCallView();
 
-	requireElement("next-to-print").addEventListener("click", () => {
-		renderTripTimeline(activeTripRoute);
-		verifyView.hidden = true;
-		printView.hidden = false;
-		updatePrintRouteResizeValue();
+		routesView.hidden = true;
+		appViews.forEach((view) => { view.hidden = view !== destination; });
+		updateViewNavigation(target);
 		window.scrollTo(0, 0);
-	});
+	}
 
-	requireElement("back-to-verify").addEventListener("click", () => {
-		printView.hidden = true;
-		verifyView.hidden = false;
-		window.scrollTo(0, 0);
-	});
-
-	requireElement("next-to-call").addEventListener("click", () => {
-		renderCallView();
-		printView.hidden = true;
-		callView.hidden = false;
-		window.scrollTo(0, 0);
-	});
-
-	requireElement("back-to-print").addEventListener("click", () => {
-		callView.hidden = true;
-		printView.hidden = false;
-		updatePrintRouteResizeValue();
-		window.scrollTo(0, 0);
-	});
+	requireElement("new-trip").addEventListener("click", () => { void showAppView("trip"); });
+	for (const button of viewNavigationButtons) {
+		button.addEventListener("click", () => { void showAppView(button.dataset.viewTarget); });
+	}
 
 	tripRouteSelect.addEventListener("change", () => {
 		const route = routes[Number(tripRouteSelect.value)];
@@ -1193,12 +1202,7 @@
 	}
 
 	requireElement("define-default-routes").addEventListener("click", async () => {
-		await defaultsInitialization;
-		homeView.hidden = true;
-		tripView.hidden = true;
-		routesView.hidden = false;
-		setSidebarOpen(false);
-		window.requestAnimationFrame(() => fitOverviewMap(true));
+		await showAppView("routes");
 	});
 
 	requireElement("routes-back").addEventListener("click", () => {
@@ -1208,6 +1212,7 @@
 			}
 			routesView.hidden = true;
 			homeView.hidden = false;
+			updateViewNavigation("home");
 			setSidebarOpen(false);
 			window.scrollTo(0, 0);
 		};
@@ -2121,14 +2126,34 @@
 			!hasAfterBoard ? "none" : (departingSelectionConfirmed ? "complete" : "warning"),
 			!hasAfterBoard,
 		);
-		nextScreenButton.disabled = !(
-			hasBeforeBoard
+
+		const canContinue = hasBeforeBoard
 			&& unindexedCount === 0
 			&& boardsReady
 			&& missingTransferTypes === 0
 			&& missingApartments === 0
-			&& departingSelectionConfirmed
-		);
+			&& departingSelectionConfirmed;
+		gatedViewButtons.forEach((button) => { button.disabled = !canContinue; });
+
+		const tripIssueCount = Number(hasBeforeBoard && unindexedCount > 0)
+			+ Number(boardsReady && missingTransferTypes > 0)
+			+ Number(hasBeforeBoard && missingApartments > 0)
+			+ Number(hasAfterBoard && !departingSelectionConfirmed);
+		const tripStatus = tripIssueCount > 0
+			? "warning"
+			: (hasBeforeBoard && boardsReady && departingSelectionConfirmed ? "complete" : "none");
+		for (const button of tripNavigationButtons) {
+			button.replaceChildren();
+			const icon = createStatusIcon(tripStatus);
+			if (icon) button.append(icon);
+			button.append(document.createTextNode(tripIssueCount > 0 ? `Trip (${tripIssueCount})` : "Trip"));
+			button.classList.toggle("has-review-issues", tripIssueCount > 0);
+			button.setAttribute("aria-label", tripIssueCount > 0
+				? `Trip, ${tripIssueCount} incomplete review ${tripIssueCount === 1 ? "task" : "tasks"}`
+				: "Trip");
+		}
+		const routeValidationCounts = canContinue ? getTripRouteValidationCounts() : new Map();
+		updateStopsNavigationStatus(canContinue, routeValidationCounts);
 	}
 
 	function appendReviewMessage(list, message) {
@@ -2794,18 +2819,80 @@
 		return { element: stopElement, vanAfter };
 	}
 
+	function refreshTripRoutePlans() {
+		const preparedRoutes = new Set();
+		const morningRoutes = getMorningRoutes();
+		for (const morningRoute of morningRoutes) {
+			const plans = getTripRoutePlans(morningRoute);
+			refreshTripHouseBefore(plans);
+			applyAutomaticTripMoves(plans);
+			preparedRoutes.add(morningRoute);
+		}
+
+		const afternoonRoutes = getAfternoonRoutes();
+		if (afternoonRoutes.length > 0) {
+			refreshSharedAfternoonFirstStopHouseBefore();
+			for (const afternoonRoute of afternoonRoutes) {
+				const plans = getTripRoutePlans(afternoonRoute);
+				refreshTripHouseBefore(plans);
+				applyAutomaticTripMoves(plans);
+				preparedRoutes.add(afternoonRoute);
+			}
+			syncSharedAfternoonFirstStopHouseAfter(afternoonRoutes);
+		}
+
+		for (const route of routes) {
+			if (preparedRoutes.has(route)) continue;
+			const plans = getTripRoutePlans(route);
+			refreshTripHouseBefore(plans);
+			applyAutomaticTripMoves(plans);
+		}
+	}
+
+	function getTripRouteValidationCounts() {
+		refreshTripRoutePlans();
+		return new Map(routes.map((route) => {
+			const plans = getTripRoutePlans(route);
+			const invalidCount = route.stops.filter((stop) =>
+				getTripHouseAfterValidation(plans, stop, getTripStopPlan(plans, stop)).isInvalid).length;
+			return [route, invalidCount];
+		}));
+	}
+
+	function updateStopsNavigationStatus(isEnabled, routeValidationCounts) {
+		const invalidCount = [...routeValidationCounts.values()].reduce((total, count) => total + count, 0);
+		const status = !isEnabled ? "none" : (invalidCount > 0 ? "warning" : "complete");
+		for (const button of stopsNavigationButtons) {
+			button.replaceChildren();
+			const icon = createStatusIcon(status);
+			if (icon) button.append(icon);
+			button.append(document.createTextNode(invalidCount > 0 ? `Stops (${invalidCount})` : "Stops"));
+			button.classList.toggle("has-review-issues", isEnabled && invalidCount > 0);
+			button.setAttribute("aria-label", !isEnabled
+				? "Stops"
+				: invalidCount > 0
+					? `Stops, ${invalidCount} invalid house-after ${invalidCount === 1 ? "placement" : "placements"}`
+					: "Stops, all house-after placements are valid");
+		}
+	}
+
 	function renderTripTimeline(route = null) {
 		const selectedRoute = routes.includes(route)
 			? route
 			: (routes.includes(activeTripRoute) ? activeTripRoute : routes[0] ?? null);
 		activeTripRoute = selectedRoute;
+		const routeValidationCounts = getTripRouteValidationCounts();
+		const canContinue = gatedViewButtons.length > 0 && [...gatedViewButtons].every((button) => !button.disabled);
+		updateStopsNavigationStatus(canContinue, routeValidationCounts);
 		tripRouteSelect.replaceChildren();
 		printRouteSelect.replaceChildren();
 		for (const [index, candidate] of routes.entries()) {
 			for (const select of [tripRouteSelect, printRouteSelect]) {
 				const option = document.createElement("option");
 				option.value = String(index);
-				option.textContent = candidate.name || `Route ${index + 1}`;
+				const invalidCount = routeValidationCounts.get(candidate) ?? 0;
+				const status = invalidCount > 0 ? "⚠" : "✓";
+				option.textContent = `${status} ${candidate.name || `Route ${index + 1}`} (${invalidCount})`;
 				select.append(option);
 			}
 		}
@@ -2833,27 +2920,6 @@
 		}
 
 		const plans = getTripRoutePlans(selectedRoute);
-		const morningRoutes = selectedRoute.time === TripTime.Afternoon
-			? getMorningRoutes()
-			: [getMorningRouteFor(selectedRoute)].filter(Boolean);
-		for (const morningRoute of morningRoutes) {
-			const morningPlans = getTripRoutePlans(morningRoute);
-			refreshTripHouseBefore(morningPlans);
-			applyAutomaticTripMoves(morningPlans);
-		}
-		if (selectedRoute.time === TripTime.Afternoon) refreshSharedAfternoonFirstStopHouseBefore();
-		if (selectedRoute.time === TripTime.Afternoon) {
-			const afternoonRoutes = getAfternoonRoutes();
-			for (const afternoonRoute of afternoonRoutes) {
-				const afternoonPlans = getTripRoutePlans(afternoonRoute);
-				refreshTripHouseBefore(afternoonPlans);
-				applyAutomaticTripMoves(afternoonPlans);
-			}
-			syncSharedAfternoonFirstStopHouseAfter(afternoonRoutes);
-		} else {
-			refreshTripHouseBefore(plans);
-			applyAutomaticTripMoves(plans);
-		}
 		let vanBefore = [];
 		for (const [index, stop] of selectedRoute.stops.entries()) {
 			const rendered = renderTripStop(stop, index, plans, vanBefore);

@@ -823,13 +823,25 @@
       "teachingAreas": [
         {
           "nameBefore": "Bonifacio B Elders",
-          "nameAfter": "",
+          "nameAfter": "Bonifacio B Elders",
           "district": {
-            "nameBefore": "",
-            "nameAfter": "",
+            "nameBefore": "Escalante District",
+            "nameAfter": "Escalante District",
             "zone": {
-              "nameBefore": "",
-              "nameAfter": ""
+              "nameBefore": "Escalante Zone",
+              "nameAfter": "Escalante Zone"
+            }
+          }
+        },
+        {
+          "nameBefore": "",
+          "nameAfter": "Bonifacio A Elders",
+          "district": {
+            "nameBefore": "Escalante District",
+            "nameAfter": "Escalante District",
+            "zone": {
+              "nameBefore": "Escalante Zone",
+              "nameAfter": "Escalante Zone"
             }
           }
         }
@@ -1906,7 +1918,6 @@
     {
       "name": "North to Duma",
       "time": "morning",
-      "direction": "north",
       "stops": [
         {
           "primaryApartmentIndex": 4,
@@ -2038,7 +2049,17 @@
         },
         {
           "primaryApartmentIndex": 65,
-          "secondaryApartmentIndexes": []
+          "secondaryApartmentIndexes": [
+            22,
+            20,
+            21,
+            18,
+            15,
+            17,
+            19,
+            16,
+            24
+          ]
         }
       ],
       "travelTimes": [
@@ -2946,7 +2967,6 @@
     {
       "name": "South to Duma",
       "time": "morning",
-      "direction": "south",
       "stops": [
         {
           "primaryApartmentIndex": 33,
@@ -3016,7 +3036,17 @@
         },
         {
           "primaryApartmentIndex": 65,
-          "secondaryApartmentIndexes": []
+          "secondaryApartmentIndexes": [
+            17,
+            15,
+            19,
+            24,
+            22,
+            20,
+            21,
+            18,
+            16
+          ]
         }
       ],
       "travelTimes": [
@@ -3348,7 +3378,6 @@
     {
       "name": "Duma to North",
       "time": "afternoon",
-      "direction": "north",
       "stops": [
         {
           "primaryApartmentIndex": 65,
@@ -3434,7 +3463,9 @@
         },
         {
           "primaryApartmentIndex": 58,
-          "secondaryApartmentIndexes": []
+          "secondaryApartmentIndexes": [
+            59
+          ]
         },
         {
           "primaryApartmentIndex": 31,
@@ -3471,8 +3502,7 @@
           "secondaryApartmentIndexes": [
             2,
             5,
-            7,
-            59
+            7
           ]
         },
         {
@@ -4397,7 +4427,6 @@
     {
       "name": "Duma to South",
       "time": "afternoon",
-      "direction": "south",
       "stops": [
         {
           "primaryApartmentIndex": 65,

@@ -19,6 +19,18 @@
 				</span>
 				<p class="brand">Transfer Van Calculator</p>
 			</header>
+			<nav class="trip-navigation view-navigation" aria-label="Views">
+				<button class="view-menu-toggle" type="button" aria-label="Open views menu" aria-expanded="false" title="Open views menu">
+					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16" /></svg>
+				</button>
+				<button class="view-nav-button" type="button" data-view-target="routes">Routes</button>
+				<button class="view-nav-button" type="button" data-view-target="home">Home</button>
+				<button class="view-nav-button" type="button" data-view-target="trip">Trip</button>
+				<button class="view-nav-button" type="button" data-view-target="next">Stops</button>
+				<button class="view-nav-button" type="button" data-view-target="verify">Verify</button>
+				<button class="view-nav-button" type="button" data-view-target="print">Print</button>
+				<button class="view-nav-button" type="button" data-view-target="call">Call list</button>
+			</nav>
 			<p class="eyebrow">Trip planning</p>
 			<!--<h1>Make every transfer count.</h1>
 			<p class="intro">Plan your van transfers and bring the trip details together in one place.</p>-->
@@ -32,16 +44,18 @@
 		</main>
 
 		<main id="trip-view" class="trip-main" hidden>
-			<div class="trip-navigation">
-				<button class="trip-back" id="back-to-home" type="button">
-					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 12H5m6 6-6-6 6-6" /></svg>
-					Back
+			<nav class="trip-navigation view-navigation" aria-label="Views">
+				<button class="view-menu-toggle" type="button" aria-label="Open views menu" aria-expanded="false" title="Open views menu">
+					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16" /></svg>
 				</button>
-				<button class="primary" id="next-screen" type="button" disabled>
-					Next
-					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6" /></svg>
-				</button>
-			</div>
+				<button class="view-nav-button" type="button" data-view-target="routes">Routes</button>
+				<button class="view-nav-button" type="button" data-view-target="home">Home</button>
+				<button class="view-nav-button" type="button" data-view-target="trip">Trip</button>
+				<button class="view-nav-button" type="button" data-view-target="next">Stops</button>
+				<button class="view-nav-button" type="button" data-view-target="verify">Verify</button>
+				<button class="view-nav-button" type="button" data-view-target="print">Print</button>
+				<button class="view-nav-button" type="button" data-view-target="call">Call list</button>
+			</nav>
 			<p class="eyebrow">Trip planning</p>
 			<p class="section-label">Attachments</p>
 			<div class="uploads">
@@ -106,15 +120,17 @@
 			</section>
 		</main>
 		<main id="next-view" class="trip-main next-main" hidden>
-			<nav class="trip-navigation" aria-label="Trip steps">
-				<button class="trip-back" id="back-to-trip" type="button">
-					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 12H5m6 6-6-6 6-6" /></svg>
-					Back
+			<nav class="trip-navigation view-navigation" aria-label="Views">
+				<button class="view-menu-toggle" type="button" aria-label="Open views menu" aria-expanded="false" title="Open views menu">
+					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16" /></svg>
 				</button>
-				<button class="primary" id="next-to-verify" type="button">
-					Next
-					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6" /></svg>
-				</button>
+				<button class="view-nav-button" type="button" data-view-target="routes">Routes</button>
+				<button class="view-nav-button" type="button" data-view-target="home">Home</button>
+				<button class="view-nav-button" type="button" data-view-target="trip">Trip</button>
+				<button class="view-nav-button" type="button" data-view-target="next">Stops</button>
+				<button class="view-nav-button" type="button" data-view-target="verify">Verify</button>
+				<button class="view-nav-button" type="button" data-view-target="print">Print</button>
+				<button class="view-nav-button" type="button" data-view-target="call">Call list</button>
 			</nav>
 			<header class="trip-timeline-header">
 				<div>
@@ -131,27 +147,31 @@
 			</div>
 		</main>
 		<main id="verify-view" class="trip-main next-main" hidden>
-			<nav class="trip-navigation" aria-label="Trip steps">
-				<button class="trip-back" id="back-to-next" type="button">
-					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 12H5m6 6-6-6 6-6" /></svg>
-					Back
+			<nav class="trip-navigation view-navigation" aria-label="Views">
+				<button class="view-menu-toggle" type="button" aria-label="Open views menu" aria-expanded="false" title="Open views menu">
+					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16" /></svg>
 				</button>
-				<button class="primary" id="next-to-print" type="button">
-					Next
-					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6" /></svg>
-				</button>
+				<button class="view-nav-button" type="button" data-view-target="routes">Routes</button>
+				<button class="view-nav-button" type="button" data-view-target="home">Home</button>
+				<button class="view-nav-button" type="button" data-view-target="trip">Trip</button>
+				<button class="view-nav-button" type="button" data-view-target="next">Stops</button>
+				<button class="view-nav-button" type="button" data-view-target="verify">Verify</button>
+				<button class="view-nav-button" type="button" data-view-target="print">Print</button>
+				<button class="view-nav-button" type="button" data-view-target="call">Call list</button>
 			</nav>
 		</main>
 		<main id="print-view" class="trip-main next-main" hidden>
-			<nav class="trip-navigation" aria-label="Trip steps">
-				<button class="trip-back" id="back-to-verify" type="button">
-					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 12H5m6 6-6-6 6-6" /></svg>
-					Back
+			<nav class="trip-navigation view-navigation" aria-label="Views">
+				<button class="view-menu-toggle" type="button" aria-label="Open views menu" aria-expanded="false" title="Open views menu">
+					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16" /></svg>
 				</button>
-				<button class="primary" id="next-to-call" type="button">
-					Next
-					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6" /></svg>
-				</button>
+				<button class="view-nav-button" type="button" data-view-target="routes">Routes</button>
+				<button class="view-nav-button" type="button" data-view-target="home">Home</button>
+				<button class="view-nav-button" type="button" data-view-target="trip">Trip</button>
+				<button class="view-nav-button" type="button" data-view-target="next">Stops</button>
+				<button class="view-nav-button" type="button" data-view-target="verify">Verify</button>
+				<button class="view-nav-button" type="button" data-view-target="print">Print</button>
+				<button class="view-nav-button" type="button" data-view-target="call">Call list</button>
 			</nav>
 			<header class="trip-timeline-header print-timeline-header">
 				<div>
@@ -174,11 +194,17 @@
 			</section>
 		</main>
 		<main id="call-view" class="trip-main next-main" hidden>
-			<nav class="trip-navigation" aria-label="Trip steps">
-				<button class="trip-back" id="back-to-print" type="button">
-					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 12H5m6 6-6-6 6-6" /></svg>
-					Back
+			<nav class="trip-navigation view-navigation" aria-label="Views">
+				<button class="view-menu-toggle" type="button" aria-label="Open views menu" aria-expanded="false" title="Open views menu">
+					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16" /></svg>
 				</button>
+				<button class="view-nav-button" type="button" data-view-target="routes">Routes</button>
+				<button class="view-nav-button" type="button" data-view-target="home">Home</button>
+				<button class="view-nav-button" type="button" data-view-target="trip">Trip</button>
+				<button class="view-nav-button" type="button" data-view-target="next">Stops</button>
+				<button class="view-nav-button" type="button" data-view-target="verify">Verify</button>
+				<button class="view-nav-button" type="button" data-view-target="print">Print</button>
+				<button class="view-nav-button" type="button" data-view-target="call">Call list</button>
 			</nav>
 			<header class="trip-timeline-header call-header">
 				<div>

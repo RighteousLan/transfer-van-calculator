@@ -24,18 +24,17 @@ It is loading the defaults incorrectly right now. IF there is no cache, look in 
 I think you can just remove the new route button all together and assume it to always be the main four. (also makes more room for apartment list)
 
 
-Main.js ParseAssignment function ln1657
-Does not detect trainers
-
+home view:
 Add an inforgraphic at the beginning about how to download the data.
 Add a warning at the end begging the APs to at least confirm the list of people who are transfering because it can calculate false positives.
 
 
 
-Make adjustments to the travel screen:
+stops view:
 -Routes should calculate who must be picked up and dropped off and place them that way, and visually identify them
 -It should really fit vertically on the screen so you don't have to scroll up and down. The letters should be larger and bolder in order to be more readable in their small state
-
+- click and drag the dotted line area to scroll left and right
+- hide scroll bar at the bottom. Remove bottom buffer
 
 call view:
 Add buttons to edit notes.
@@ -43,8 +42,10 @@ Add emailing functionality. (list to enter emails for each zone)
     Mark in the dropdown menu if their email is ready.
     maybe add a group send time.
 Add a note at the bottom for the email.
+The variable width slider should ALWAYS initialize as max width
+
 
 In the real name function, add a feature to account for people with the same last name like anderson and anderson
 
 
-Alter the navigation bar to be at the top kinda like the drivers qualification thing.
+adjust the site so it doesn't shift when the scroll bar is visible.
