@@ -10,6 +10,8 @@ The first worksheet in each `.xlsx` transfer board should include first and last
 
 Imported data is available in `window.transferVanData.missionaries` and `window.transferVanData.zones` for subsequent website functionality.
 
+On the stop timeline, use the mouse wheel or drag the background left and right to scroll. Dragging teaching areas and missionaries still moves those items.
+
 ## Apartment batch file
 
 Batch add reads the first worksheet of an `.xlsx` file by column position: teaching area in C, phone number in D, and address in E. A header row is optional. Rows with the same address are merged, keeping unique phone numbers and teaching areas for review.

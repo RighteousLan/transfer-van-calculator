@@ -1519,6 +1519,8 @@ button.map-pin:not(:disabled):hover {
 
 .next-main { min-width: 0; }
 
+.shell:has(#next-view:not([hidden])) { padding-bottom: 0; }
+
 .shell:has(#print-view:not([hidden])) {
 	width: min(100% - 32px, 1600px);
 }
@@ -1621,10 +1623,17 @@ button.map-pin:not(:disabled):hover {
 	max-width: 100%;
 	overflow-x: auto;
 	overscroll-behavior-inline: contain;
+	scrollbar-width: none;
 	border-top: 1px solid var(--line);
 	border-bottom: 1px solid var(--line);
 	background: rgb(255 255 255 / 54%);
+	cursor: grab;
 }
+
+.trip-timeline-viewport.is-dragging { cursor: grabbing; user-select: none; }
+.trip-timeline-viewport.is-dragging .trip-missionary:disabled { cursor: grabbing; }
+
+.trip-timeline-viewport::-webkit-scrollbar { display: none; }
 
 .trip-timeline {
 	position: relative;
@@ -1632,7 +1641,7 @@ button.map-pin:not(:disabled):hover {
 	width: max-content;
 	min-width: 100%;
 	gap: 22px;
-	padding: 8px 4px 12px;
+	padding: 8px 4px 6px;
 }
 
 .trip-timeline::before {
@@ -1668,7 +1677,7 @@ button.map-pin:not(:disabled):hover {
 	grid-template-rows: 164px 132px 132px 50px 132px 132px 96px;/**/
 	/*grid-template-rows: 164px 132px 50px 132px 96px;/**/
 	gap: 10px 12px;
-	padding: 12px 0 20px;
+	padding: 12px 0 0px;
 }
 
 .trip-stop-house {
@@ -1846,7 +1855,7 @@ button.map-pin:not(:disabled):hover {
 
 .trip-missionary[draggable="true"] { cursor: grab; }
 .trip-missionary[draggable="true"]:active { cursor: grabbing; }
-.trip-missionary:disabled { opacity: 1; cursor: default; }
+.trip-missionary:disabled { opacity: 1; cursor: not-allowed; }
 .trip-missionary[draggable="true"]:hover { border-color: #84a493; background: var(--soft-green); }
 
 .trip-box.is-drop-target {

@@ -1695,6 +1695,33 @@
 		const factor = event.deltaY < 0 ? 1.15 : 1 / 1.15;
 		changeMapScale(mapScale * factor, event.clientX - bounds.left, event.clientY - bounds.top);
 	}, { passive: false });
+	let timelinePan = null;
+	tripTimelineViewport.addEventListener("pointerdown", (event) => {
+		if (event.pointerType !== "mouse" || event.button !== 0 || timelinePan
+			|| tripTimelineViewport.scrollWidth <= tripTimelineViewport.clientWidth) return;
+		if (event.target instanceof Element
+			&& event.target.closest('[draggable="true"], button:not(:disabled), a, input, select, textarea')) return;
+		timelinePan = {
+			pointerId: event.pointerId,
+			startX: event.clientX,
+			scrollLeft: tripTimelineViewport.scrollLeft,
+		};
+		tripTimelineViewport.classList.add("is-dragging");
+		tripTimelineViewport.setPointerCapture(event.pointerId);
+		event.preventDefault();
+	});
+	tripTimelineViewport.addEventListener("pointermove", (event) => {
+		if (!timelinePan || event.pointerId !== timelinePan.pointerId) return;
+		tripTimelineViewport.scrollLeft = timelinePan.scrollLeft - (event.clientX - timelinePan.startX);
+	});
+	const finishTimelinePan = (event) => {
+		if (!timelinePan || event.pointerId !== timelinePan.pointerId) return;
+		timelinePan = null;
+		tripTimelineViewport.classList.remove("is-dragging");
+	};
+	tripTimelineViewport.addEventListener("pointerup", finishTimelinePan);
+	tripTimelineViewport.addEventListener("pointercancel", finishTimelinePan);
+	tripTimelineViewport.addEventListener("lostpointercapture", finishTimelinePan);
 	tripTimelineViewport.addEventListener("wheel", (event) => {
 		const list = event.target instanceof Element
 			? event.target.closest(".trip-box-list, .trip-teaching-areas")
@@ -2886,6 +2913,7 @@
 		const selectedRoute = routes.includes(route)
 			? route
 			: (routes.includes(activeTripRoute) ? activeTripRoute : routes[0] ?? null);
+		if (selectedRoute !== activeTripRoute) tripTimelineViewport.scrollLeft = 0;
 		activeTripRoute = selectedRoute;
 		const routeValidationCounts = getTripRouteValidationCounts();
 		const canContinue = gatedViewButtons.length > 0 && [...gatedViewButtons].every((button) => !button.disabled);
