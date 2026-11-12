@@ -232,12 +232,12 @@
 		if (target === "next") renderTripTimeline();
 		if (target === "print") {
 			renderTripTimeline(activeTripRoute);
-			updatePrintRouteResizeValue();
 		}
 		if (target === "call") renderCallView();
 
 		routesView.hidden = true;
 		appViews.forEach((view) => { view.hidden = view !== destination; });
+		if (target === "print") updatePrintRouteResizeValue();
 		updateViewNavigation(target);
 		window.scrollTo(0, 0);
 	}
@@ -292,9 +292,7 @@
 		event.preventDefault();
 	});
 	window.addEventListener("resize", () => {
-		if (printRouteFrame.style.width) {
-			setPrintRouteFrameWidth(Number.parseFloat(printRouteFrame.style.width), getPrintRouteWidthLimits());
-		}
+		if (!printView.hidden) updatePrintRouteResizeValue();
 	});
 
 	function getPrintRouteWidthLimits() {
@@ -303,17 +301,26 @@
 	}
 
 	function updatePrintRouteResizeValue() {
-		setPrintRouteFrameWidth(printRouteFrame.getBoundingClientRect().width, getPrintRouteWidthLimits());
+		const limits = getPrintRouteWidthLimits();
+		if (printRouteFrame.style.width) {
+			setPrintRouteFrameWidth(Number.parseFloat(printRouteFrame.style.width), limits);
+		} else {
+			updatePrintRouteResizeAttributes(printRouteFrame.getBoundingClientRect().width, limits);
+		}
 	}
 
 	function setPrintRouteFrameWidth(width, limits) {
 		const boundedWidth = Math.max(limits.minWidth, Math.min(limits.maxWidth, width));
 		printRouteFrame.style.width = `${boundedWidth}px`;
-		printRouteResize.setAttribute("aria-valuemin", String(Math.round(limits.minWidth)));
-		printRouteResize.setAttribute("aria-valuemax", String(Math.round(limits.maxWidth)));
-		printRouteResize.setAttribute("aria-valuenow", String(Math.round(boundedWidth)));
-		printRouteResize.setAttribute("aria-valuetext", `${Math.round(boundedWidth)} pixels`);
+		updatePrintRouteResizeAttributes(boundedWidth, limits);
 	}
+
+	function updatePrintRouteResizeAttributes(width, limits) {
+         printRouteResize.setAttribute("aria-valuemin", String(Math.round(limits.minWidth)));
+         printRouteResize.setAttribute("aria-valuemax", String(Math.round(limits.maxWidth)));
+         printRouteResize.setAttribute("aria-valuenow", String(Math.round(width)));
+         printRouteResize.setAttribute("aria-valuetext", `${Math.round(width)} pixels`);
+     }
 
 	function finishPrintRouteResize(event) {
 		if (!printResizeStart || event.pointerId !== printResizeStart.pointerId) return;
@@ -1147,7 +1154,6 @@
 		batchApartmentReviewSummary.textContent = `${candidates.length} unique ${candidates.length === 1 ? "address" : "addresses"}. Review the details and enter a name for each apartment.`;
 		batchApartmentReview.hidden = false;
 		saveBatchApartments.hidden = false;
-		updateBatchApartmentNameState();
 	}
 
 	async function loadBatchApartmentFile(file) {
@@ -1595,7 +1601,7 @@
 		tripView.hidden = true;
 		routesView.hidden = false;
 		setSidebarOpen(false);
-		routesView.classList.add("pin-picking");
+			routesView.classList.add("pin-picking");
 		pinPickBanner.hidden = false;
 		mapTitle.textContent = "Select apartment location";
 		window.requestAnimationFrame(() => {
@@ -2872,7 +2878,7 @@
 				? "Stops"
 				: invalidCount > 0
 					? `Stops, ${invalidCount} invalid house-after ${invalidCount === 1 ? "placement" : "placements"}`
-					: "Stops, all house-after placements are valid");
+					: "Stops");
 		}
 	}
 
@@ -3236,7 +3242,7 @@
 				missionary.currentLoc = apartments.find((apartment) => apartment.teachingAreas.some((teachingArea) =>
 					normalize(teachingArea.nameBefore) === areaKey || normalize(teachingArea.nameAfter) === areaKey)) ?? null;
 			} else {
-				missionary.areaAfter = area;
+							missionary.areaAfter = area;
 				missionary.positionAfter = assignment.position;
 				missionary.compAfter = assignment.companion;
 				missionary.transferType = calculateTransferType(missionary);
