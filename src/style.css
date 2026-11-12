@@ -1117,6 +1117,16 @@ button svg, .upload-button svg { width: 17px; height: 17px; }
 	background: #fff;
 }
 
+.batch-review-entry.needs-name-review, .batch-review-entry.is-partial-match {
+	border-color: #bd6a0a;
+	background: #fff3e0;
+}
+
+.batch-review-entry > .batch-name-review-notice, .batch-review-entry > .batch-partial-match-notice {
+	color: #874900;
+	font-weight: 650;
+}
+
 .batch-review-entry .batch-address {
 	margin: 0 0 10px;
 	color: var(--ink);
@@ -1139,6 +1149,71 @@ button svg, .upload-button svg { width: 17px; height: 17px; }
 .batch-review-entry .teaching-area-names strong {
 	color: var(--ink);
 	font-weight: 700;
+}
+
+.batch-compare-button {
+	display: block;
+	margin-top: 10px;
+}
+
+.batch-comparison-dialog {
+	width: min(calc(100vw - 32px), 800px);
+	overflow-y: auto;
+}
+
+.batch-comparison-dialog form { gap: 14px; }
+
+.batch-comparison-dialog select {
+	width: 100%;
+	min-height: 42px;
+	padding: 9px 12px;
+	border: 1px solid var(--line);
+	border-radius: 4px;
+	background: #fff;
+	color: var(--ink);
+	font: inherit;
+}
+
+.batch-comparison-fields {
+	display: grid;
+	gap: 12px;
+}
+
+.batch-comparison-fields fieldset {
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: 8px;
+	min-width: 0;
+	margin: 0;
+	padding: 10px;
+	border: 1px solid var(--line);
+}
+
+.batch-comparison-fields legend {
+	padding: 0 4px;
+	font-size: 13px;
+	font-weight: 650;
+}
+
+.batch-comparison-fields label {
+	display: flex;
+	align-items: flex-start;
+	gap: 8px;
+	min-width: 0;
+	padding: 8px;
+	border-radius: 4px;
+	background: #f4f6f2;
+	font-size: 13px;
+	line-height: 1.4;
+	overflow-wrap: anywhere;
+}
+
+.batch-comparison-fields label span { white-space: pre-wrap; }
+.batch-comparison-fields label:last-child:nth-child(4) { grid-column: 1 / -1; }
+.batch-comparison-fields input { flex: 0 0 auto; margin: 3px 0 0; }
+.batch-review-entry > .batch-merge-notice {
+	color: var(--ink);
+	font-weight: 650;
 }
 
 .map-panel {

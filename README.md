@@ -19,3 +19,11 @@ Use **Copy to clipboard** to copy the selected zone's table, including current n
 ## Apartment batch file
 
 Batch add reads the first worksheet of an `.xlsx` file by column position: teaching area in C, phone number in D, and address in E. A header row is optional. Rows with the same address are merged, keeping unique phone numbers and teaching areas for review.
+
+Cards already matching a named apartment's address, phone numbers, and teaching areas are hidden from review. Matching ignores case, punctuation, and the order of phone numbers and areas; an area's before or after name can match. Names and map pins are not supplied by the spreadsheet and are left unchanged.
+
+The review suggests a name from the teaching area, or from words shared by all teaching areas at an address (ignoring case and preserving the first area's word order). Existing apartment names take precedence. Review and edit the suggestions; apartments without a name or with duplicate names must be corrected before saving.
+
+One-word suggested names are highlighted orange for review. This is a reminder, not an error, and editing the name dismisses it.
+
+Cards with a matching name and address but different details are highlighted orange as partial matches; this is also a reminder, not an error. Use **Compare existing apartment** on a partial match or a duplicate-name conflict to compare its details with the imported card. You can ignore the imported card, or stage a merge by choosing the existing or imported value for each field; phone numbers and teaching areas can also be combined. Merges are applied only when the batch is saved. If the existing apartment has a pending card, its staged data is shown on the existing side and included in the merge choices. A matching address updates the first existing apartment at that address; other apartments, including those sharing that address, are checked for name conflicts.

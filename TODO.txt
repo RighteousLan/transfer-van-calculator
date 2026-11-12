@@ -1,13 +1,13 @@
 In the default routes screen. Every instance that has the add pin button should  show coords and say edit pin if there already is a pin.
 The edit screen should show a list of phone numbers and a button to add or remove from the list. Same goes for areas.
 Move the batch add button to be nicer. (inside the menu of the Add button)
-Batching appartments with existing apartments should ask the user to pick between collisions.
 
 ROUTE EDITOR
--The Arrows are backwards in the add route list.
 Should I add the Edit apartment button to the route list?
 Make the columns in the route editor more thin
 Right now you cannot reorder a secondary apartment
+
+
 
 
 Add pin menu:
@@ -40,3 +40,9 @@ In the real name function, add a feature to account for people with the same las
 
 
 adjust the site so it doesn't shift when the scroll bar is visible.
+
+
+trip-view:
+Let the user undo the ignore button by clicking it again
+When an area is renamed, it jut comes up as an area not indexed. very not epic.
+When selecting departing missionaries, display a total on the confirm button

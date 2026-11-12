@@ -129,9 +129,18 @@
 	const saveBatchApartments = requireElement("save-batch-apartments");
 	const batchApartmentUnnamedCount = requireElement("batch-apartment-unnamed-count");
 	const batchApartmentDuplicateCount = requireElement("batch-apartment-duplicate-count");
+	const batchApartmentExistingConflictCount = requireElement("batch-apartment-existing-conflict-count");
+	const batchComparisonDialog = requireElement("batch-comparison-dialog");
+	const batchComparisonForm = requireElement("batch-comparison-form");
+	const batchComparisonTarget = requireElement("batch-comparison-target");
+	const batchComparisonFields = requireElement("batch-comparison-fields");
+	const batchComparisonSourceNotice = requireElement("batch-comparison-source-notice");
+	const batchComparisonMerge = requireElement("batch-comparison-merge");
 	let minimumMapScale = 0;
 	let mapScale = 0;
 	let pendingBatchApartments = [];
+	let matchedBatchApartmentCount = 0;
+	let batchComparison = null;
 	const unindexedAreas = new Set();
 	const ignoredUnindexedAreas = new Set();
 	const ignoredTransferTypeMissionaries = new Set();
@@ -808,8 +817,8 @@
 		button.setAttribute("aria-label", `${direction === "into-route" ? "Add" : "Remove"} ${label} ${direction === "into-route" ? "to" : "from"} route`);
 		button.title = direction === "into-route" ? "Add to route" : "Remove from route";
 		const arrow = direction === "into-route"
-			? "<path d='M5 12h14m-6-6 6 6-6 6' />"
-			: "<path d='M19 12H5m6 6-6-6 6-6' />";
+			? "<path d='M19 12H5m6 6-6-6 6-6' />"
+			: "<path d='M5 12h14m-6-6 6 6-6 6' />";
 		button.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${arrow}</svg>`;
 		button.addEventListener("click", onClick);
 		return button;
@@ -1034,6 +1043,7 @@
 	function resetBatchApartmentDialog() {
 		if (pinSelectionSession?.dialog === batchApartmentDialog) return;
 		pendingBatchApartments = [];
+		matchedBatchApartmentCount = 0;
 		batchApartmentForm.reset();
 		batchApartmentFilename.textContent = "";
 		batchApartmentStatus.textContent = "";
@@ -1046,6 +1056,8 @@
 		batchApartmentUnnamedCount.textContent = "";
 		batchApartmentDuplicateCount.hidden = true;
 		batchApartmentDuplicateCount.textContent = "";
+		batchApartmentExistingConflictCount.hidden = true;
+		batchApartmentExistingConflictCount.textContent = "";
 		batchApartmentDropzone.hidden = false;
 		batchApartmentDropzone.classList.remove("drag-over");
 		renderMapPins();
@@ -1064,10 +1076,12 @@
 		batchApartmentUnnamedCount.textContent = `${missingCount} ${missingCount === 1 ? "apartment" : "apartments"} without names`;
 		batchApartmentUnnamedCount.hidden = missingCount === 0;
 
-		const reviewedAddresses = new Set(pendingBatchApartments.map(({ key }) => key));
+		const pendingByApartment = new Map(pendingBatchApartments
+			.filter(({ existing }) => existing)
+			.map((candidate) => [candidate.existing, candidate]));
 		const nameCounts = new Map();
 		for (const apartment of apartments) {
-			if (reviewedAddresses.has(normalize(apartment.address))) continue;
+			if (pendingByApartment.has(apartment)) continue;
 			const nameKey = normalize(apartment.name);
 			if (nameKey) nameCounts.set(nameKey, (nameCounts.get(nameKey) ?? 0) + 1);
 		}
@@ -1075,20 +1089,49 @@
 			const nameKey = normalize(nameInput.value.trim());
 			if (nameKey) nameCounts.set(nameKey, (nameCounts.get(nameKey) ?? 0) + 1);
 		}
+		const pendingNameKeys = new Set(pendingBatchApartments
+			.map(({ nameInput }) => normalize(nameInput.value.trim())));
 		const duplicateNameKeys = new Set([...nameCounts]
-			.filter(([, count]) => count > 1)
+			.filter(([nameKey, count]) => count > 1 && pendingNameKeys.has(nameKey))
 			.map(([nameKey]) => nameKey));
-		for (const { nameInput } of pendingBatchApartments) {
-			updateNameInputState(nameInput, duplicateNameKeys.has(normalize(nameInput.value.trim())));
+		let existingConflictCount = 0;
+		for (const candidate of pendingBatchApartments) {
+			const { existing, nameInput, compareButton } = candidate;
+			const nameKey = normalize(nameInput.value.trim());
+			updateNameInputState(nameInput, duplicateNameKeys.has(nameKey));
+			const matches = nameKey ? apartments.filter((apartment) => {
+				const pendingMatch = pendingByApartment.get(apartment);
+				const effectiveName = pendingMatch ? pendingMatch.nameInput.value.trim() : apartment.name;
+				return apartment !== existing && normalize(effectiveName) === nameKey;
+			}) : [];
+			if (matches.length) existingConflictCount += 1;
+			const partialMatches = !candidate.mergeData && nameKey ? apartments.filter((apartment) =>
+				normalize(apartment.address) === candidate.key && normalize(apartment.name) === nameKey
+				&& !matchesExistingApartment(candidate, apartment)) : [];
+			candidate.entry.classList.toggle("is-partial-match", partialMatches.length > 0);
+			candidate.partialMatchNotice.hidden = partialMatches.length === 0;
+			for (const apartment of partialMatches.reverse()) {
+				if (!matches.includes(apartment)) matches.unshift(apartment);
+			}
+			candidate.matches = matches;
+			compareButton.hidden = matches.length === 0;
 		}
-		const duplicateCount = [...nameCounts.values()]
-			.filter((count) => count > 1)
-			.reduce((total, count) => total + count, 0);
+		const duplicateCount = [...duplicateNameKeys]
+			.reduce((total, nameKey) => total + nameCounts.get(nameKey), 0);
 		batchApartmentDuplicateCount.textContent = `${duplicateCount} ${duplicateCount === 1 ? "apartment has a duplicate name" : "apartments have duplicate names"}`;
 		batchApartmentDuplicateCount.hidden = duplicateCount === 0;
+		batchApartmentExistingConflictCount.textContent = `${existingConflictCount} ${existingConflictCount === 1 ? "apartment matches" : "apartments match"} an existing apartment name`;
+		batchApartmentExistingConflictCount.hidden = existingConflictCount === 0;
 		const hasInvalidFields = [...batchApartmentForm.elements]
 			.some((field) => field.willValidate && !field.validity.valid);
 		saveBatchApartments.disabled = missingCount > 0 || duplicateCount > 0 || hasInvalidFields;
+		saveBatchApartments.hidden = pendingBatchApartments.length === 0;
+		batchApartmentReviewSummary.textContent = pendingBatchApartments.length
+			? `${pendingBatchApartments.length} ${pendingBatchApartments.length === 1 ? "apartment" : "apartments"} to review. Enter a unique name for each apartment.`
+			: "No apartments left to add. Close this window to return.";
+		if (matchedBatchApartmentCount) {
+			batchApartmentReviewSummary.textContent += ` ${matchedBatchApartmentCount} matching ${matchedBatchApartmentCount === 1 ? "apartment is" : "apartments are"} hidden.`;
+		}
 	}
 
 	function splitCellValues(value) {
@@ -1108,6 +1151,32 @@
 			merged.push(value);
 		}
 		return merged;
+	}
+
+	function matchesExistingApartment(candidate, apartment) {
+		if (!apartment.name.trim() || normalize(apartment.address) !== candidate.key) return false;
+		const existingPhones = new Set(apartment.phoneNumbers.map(normalize).filter(Boolean));
+		const incomingPhones = new Set(candidate.phoneNumbers.map(normalize).filter(Boolean));
+		if (existingPhones.size !== incomingPhones.size
+			|| [...existingPhones].some((phone) => !incomingPhones.has(phone))) return false;
+
+		if (apartment.teachingAreas.length !== candidate.teachingAreaNames.length) return false;
+		const incomingAreas = candidate.teachingAreaNames.map(normalize);
+		const assignedAreas = Array(incomingAreas.length).fill(-1);
+		function assignArea(areaIndex, seen) {
+			const area = apartment.teachingAreas[areaIndex];
+			const keys = [normalize(area.nameBefore), normalize(area.nameAfter)].filter(Boolean);
+			for (let index = 0; index < incomingAreas.length; index += 1) {
+				if (seen.has(index) || !keys.includes(incomingAreas[index])) continue;
+				seen.add(index);
+				if (assignedAreas[index] === -1 || assignArea(assignedAreas[index], seen)) {
+					assignedAreas[index] = areaIndex;
+					return true;
+				}
+			}
+			return false;
+		}
+		return apartment.teachingAreas.every((_, index) => assignArea(index, new Set()));
 	}
 
 	function collectUniqueAddresses(rows) {
@@ -1162,8 +1231,207 @@
 		return merged;
 	}
 
+	function suggestApartmentName(areaNames) {
+		if (areaNames.length === 0) return "";
+		const words = areaNames.map((name) => name.trim().split(/\s+/).filter(Boolean));
+		const otherWords = words.slice(1).map((areaWords) =>
+			new Set(areaWords.map((word) => word.toLocaleLowerCase())));
+		const seen = new Set();
+		return words[0].filter((word) => {
+			const key = word.toLocaleLowerCase();
+			if (seen.has(key) || !otherWords.every((areaWords) => areaWords.has(key))) return false;
+			seen.add(key);
+			return true;
+		}).join(" ");
+	}
+
+	function combinedAreaSelection(first, second) {
+		const existing = [];
+		const keys = new Set();
+		for (const area of [...first.existing, ...second.existing]) {
+			const areaKeys = [normalize(area.nameBefore), normalize(area.nameAfter)].filter(Boolean);
+			if (areaKeys.some((key) => keys.has(key))) continue;
+			existing.push(area);
+			areaKeys.forEach((key) => keys.add(key));
+		}
+		return { existing, names: mergeUniqueStrings(first.names, second.names) };
+	}
+
+	function areaSelectionText(selection) {
+		return mergeUniqueStrings(
+			selection.existing.map((area) => area.nameBefore || area.nameAfter).filter(Boolean),
+			selection.names,
+		).join("\n") || "None";
+	}
+
+	function comparisonAreaText(selection) {
+		const details = selection.existing.map((area) => [
+			`Area: ${displayChangedName(area.nameBefore, area.nameAfter)}`,
+			`District: ${displayChangedName(area.district.nameBefore, area.district.nameAfter)}`,
+			`Zone: ${displayChangedName(area.district.zone.nameBefore, area.district.zone.nameAfter)}`,
+		].join("\n"));
+		const existingKeys = new Set(selection.existing.flatMap((area) =>
+			[normalize(area.nameBefore), normalize(area.nameAfter)]));
+		for (const name of selection.names) {
+			if (!existingKeys.has(normalize(name))) details.push(`Area: ${name}`);
+		}
+		return details.join("\n\n") || "None";
+	}
+
+	function formatPin(pin) {
+		return pin ? `${pin.x}, ${pin.y}` : "Not set";
+	}
+
+	function comparisonExistingData(target, candidate) {
+		const pending = pendingBatchApartments.find((item) => item !== candidate && item.existing === target);
+		return {
+			pending,
+			name: pending ? pending.nameInput.value.trim() : target.name,
+			address: pending?.mergeData ? pending.address : target.address,
+			phoneNumbers: pending
+				? pending.mergeData?.phoneNumbers ?? mergeUniqueStrings(target.phoneNumbers, pending.phoneNumbers)
+				: target.phoneNumbers,
+			areas: pending
+				? pending.mergeData?.areas ?? { existing: target.teachingAreas, names: pending.teachingAreaNames }
+				: { existing: target.teachingAreas, names: [] },
+			visualPin: pending ? pending.visualPin : target.visualPin,
+		};
+	}
+
+	function hasAbsorbedApartment(candidate, apartment) {
+		return (candidate.absorbed ?? []).some((item) =>
+			item.existing === apartment || hasAbsorbedApartment(item, apartment));
+	}
+
+	function renderBatchComparison() {
+		if (!batchComparison) return;
+		const { candidate, matches } = batchComparison;
+		const target = matches[Number(batchComparisonTarget.value)];
+		const existing = comparisonExistingData(target, candidate);
+		const importedAreas = candidate.mergeData?.areas ?? { existing: [], names: candidate.teachingAreaNames };
+		const importedPhones = candidate.mergeData?.phoneNumbers ?? candidate.phoneNumbers;
+		const fields = [
+			{ name: "name", label: "Name", old: existing.name, incoming: candidate.nameInput.value.trim() },
+			{ name: "address", label: "Address", old: existing.address, incoming: candidate.address },
+			{ name: "phones", label: "Phone numbers", old: existing.phoneNumbers.join("\n"), incoming: importedPhones.join("\n"), combine: true },
+			{ name: "areas", label: "Teaching areas", old: comparisonAreaText(existing.areas), incoming: comparisonAreaText(importedAreas), combine: true },
+			{ name: "pin", label: "Visual pin", old: formatPin(existing.visualPin), incoming: formatPin(candidate.visualPin) },
+		];
+		batchComparisonFields.replaceChildren();
+		for (const field of fields) {
+			const group = document.createElement("fieldset");
+			const legend = document.createElement("legend");
+			legend.textContent = field.label;
+			group.append(legend);
+			const options = [
+				{ value: "old", text: `Existing\n${field.old || "None"}` },
+				{ value: "new", text: `Imported\n${field.incoming || "None"}` },
+			];
+			if (field.combine) options.push({ value: "both", text: "Keep both" });
+			for (const option of options) {
+				const label = document.createElement("label");
+				const input = document.createElement("input");
+				input.type = "radio";
+				input.name = field.name;
+				input.value = option.value;
+				input.checked = field.combine ? option.value === "both" : option.value === "old";
+				const text = document.createElement("span");
+				text.textContent = option.text;
+				label.append(input, text);
+				group.append(label);
+			}
+			batchComparisonFields.append(group);
+		}
+		const notices = [];
+		if (candidate.existing && candidate.existing !== target) {
+			notices.push("The apartment at the imported address will remain unchanged.");
+		}
+		if (existing.pending) {
+			notices.push("The existing side includes its pending card; that card will be combined into this merge.");
+		}
+		const reserved = pendingBatchApartments.some((item) => hasAbsorbedApartment(item, target));
+		if (reserved) {
+			notices.push("This apartment is part of another staged merge. Save or cancel the batch before merging into it.");
+		}
+		batchComparisonMerge.disabled = reserved;
+		batchComparisonSourceNotice.hidden = notices.length === 0;
+		batchComparisonSourceNotice.textContent = notices.join(" ");
+	}
+
+	function openBatchComparison(candidate) {
+		batchComparison = { candidate, matches: candidate.matches };
+		batchComparisonTarget.replaceChildren();
+		candidate.matches.forEach((apartment, index) => {
+			const option = document.createElement("option");
+			option.value = String(index);
+			const existing = comparisonExistingData(apartment, candidate);
+			option.textContent = `${existing.name || "Unnamed"} — ${existing.address || "No address"}`;
+			batchComparisonTarget.append(option);
+		});
+		renderBatchComparison();
+		batchComparisonDialog.showModal();
+	}
+
+	batchComparisonTarget.addEventListener("change", renderBatchComparison);
+	requireElement("batch-comparison-cancel").addEventListener("click", () => batchComparisonDialog.close());
+	batchComparisonDialog.addEventListener("close", () => { batchComparison = null; });
+	requireElement("batch-comparison-ignore").addEventListener("click", () => {
+		if (!batchComparison) return;
+		const { candidate } = batchComparison;
+		pendingBatchApartments = pendingBatchApartments.filter((item) => item !== candidate);
+		candidate.entry.remove();
+		if (candidate.absorbed?.length) {
+			pendingBatchApartments.push(...candidate.absorbed);
+			pendingBatchApartments.sort((first, second) => first.order - second.order);
+			for (const item of pendingBatchApartments) batchApartmentReviewList.append(item.entry);
+		}
+		batchComparisonDialog.close();
+		updateBatchApartmentNameState();
+		renderMapPins();
+	});
+	batchComparisonForm.addEventListener("submit", (event) => {
+		event.preventDefault();
+		if (!batchComparison) return;
+		const { candidate, matches } = batchComparison;
+		const target = matches[Number(batchComparisonTarget.value)];
+		if (batchComparisonMerge.disabled) return;
+		const existing = comparisonExistingData(target, candidate);
+		const choices = new FormData(batchComparisonForm);
+		const importedPhones = candidate.mergeData?.phoneNumbers ?? candidate.phoneNumbers;
+		const importedAreas = candidate.mergeData?.areas ?? { existing: [], names: candidate.teachingAreaNames };
+		const phoneChoice = choices.get("phones");
+		const areaChoice = choices.get("areas");
+		candidate.mergeData = {
+			phoneNumbers: phoneChoice === "old" ? [...existing.phoneNumbers]
+				: phoneChoice === "new" ? [...importedPhones] : mergeUniqueStrings(existing.phoneNumbers, importedPhones),
+			areas: areaChoice === "old" ? existing.areas
+				: areaChoice === "new" ? importedAreas : combinedAreaSelection(existing.areas, importedAreas),
+		};
+		candidate.address = choices.get("address") === "old" ? existing.address : candidate.address;
+		candidate.visualPin = choices.get("pin") === "old" ? existing.visualPin : candidate.visualPin;
+		candidate.nameInput.value = choices.get("name") === "old" ? existing.name : candidate.nameInput.value;
+		candidate.existing = target;
+		if (existing.pending) {
+			candidate.absorbed ??= [];
+			candidate.absorbed.push(existing.pending);
+			pendingBatchApartments = pendingBatchApartments.filter((item) => item !== existing.pending);
+			existing.pending.entry.remove();
+		}
+		candidate.addressText.textContent = candidate.address || "No address";
+		candidate.phoneText.textContent = `Phone numbers: ${candidate.mergeData.phoneNumbers.join(", ") || "None"}`;
+		candidate.areaNames.textContent = areaSelectionText(candidate.mergeData.areas).replace(/\n/g, ", ");
+		candidate.mergeNotice.textContent = `Merge into ${target.name || "existing apartment"} staged.`;
+		candidate.mergeNotice.hidden = false;
+		batchComparisonDialog.close();
+		candidate.nameInput.dispatchEvent(new Event("input", { bubbles: true }));
+		renderMapPins();
+	});
+
 	function renderBatchApartmentReview(candidates) {
-		pendingBatchApartments = candidates.map((candidate, index) => {
+		const unmatchedCandidates = candidates.filter((candidate) =>
+			!apartments.some((apartment) => matchesExistingApartment(candidate, apartment)));
+		matchedBatchApartmentCount = candidates.length - unmatchedCandidates.length;
+		pendingBatchApartments = unmatchedCandidates.map((candidate, index) => {
 			const existing = apartments.find((apartment) => normalize(apartment.address) === candidate.key);
 			const entry = document.createElement("article");
 			entry.className = "batch-review-entry";
@@ -1190,14 +1458,46 @@
 			nameInput.maxLength = 120;
 			nameInput.autocomplete = "off";
 			nameInput.required = true;
-			nameInput.value = existing?.name || (candidate.teachingAreaNames.length === 1 ? candidate.teachingAreaNames[0] : "");
+			nameInput.value = existing?.name || (candidate.teachingAreaNames.length === 1
+				? candidate.teachingAreaNames[0]
+				: suggestApartmentName(candidate.teachingAreaNames));
 			nameInput.addEventListener("input", updateBatchApartmentNameState);
 			nameLabel.append(nameInput);
+			entry.append(nameLabel);
+			if (!existing?.name && nameInput.value.trim() && !/\s/.test(nameInput.value.trim())) {
+				entry.classList.add("needs-name-review");
+				const notice = document.createElement("p");
+				notice.className = "batch-name-review-notice";
+				notice.textContent = "Review this one-word suggested name.";
+				entry.append(notice);
+				nameInput.addEventListener("input", () => {
+					entry.classList.remove("needs-name-review");
+					notice.remove();
+				}, { once: true });
+			}
 			const pinButton = document.createElement("button");
 			pinButton.className = "secondary pin-action";
 			pinButton.type = "button";
 			pinButton.textContent = "Add pin";
-			entry.append(nameLabel, addressText, phoneText, areaText, pinButton);
+			const compareButton = document.createElement("button");
+			compareButton.className = "secondary batch-compare-button";
+			compareButton.type = "button";
+			compareButton.textContent = "Compare existing apartment";
+			compareButton.hidden = true;
+			compareButton.setAttribute("aria-haspopup", "dialog");
+			compareButton.setAttribute("aria-controls", "batch-comparison-dialog");
+			compareButton.addEventListener("click", () => {
+				const pendingCandidate = pendingBatchApartments.find((item) => item.key === candidate.key);
+				if (pendingCandidate?.matches.length) openBatchComparison(pendingCandidate);
+			});
+			const mergeNotice = document.createElement("p");
+			mergeNotice.className = "batch-merge-notice";
+			mergeNotice.hidden = true;
+			const partialMatchNotice = document.createElement("p");
+			partialMatchNotice.className = "batch-partial-match-notice";
+			partialMatchNotice.textContent = "Partial match: name and address match, but other details differ.";
+			partialMatchNotice.hidden = true;
+			entry.append(partialMatchNotice, mergeNotice, addressText, phoneText, areaText, pinButton, compareButton);
 			batchApartmentReviewList.append(entry);
 			candidate.visualPin = existing?.visualPin ?? null;
 			pinButton.addEventListener("click", () => beginMapPinSelection(batchApartmentDialog, (visualPin) => {
@@ -1206,12 +1506,12 @@
 				if (pendingCandidate) pendingCandidate.visualPin = visualPin;
 				renderMapPins();
 			}));
-			return { ...candidate, nameInput };
+			return { ...candidate, existing, nameInput, compareButton, entry, addressText, phoneText, areaNames, mergeNotice, partialMatchNotice, matches: [], order: index };
 		});
 
-		batchApartmentReviewSummary.textContent = `${candidates.length} unique ${candidates.length === 1 ? "address" : "addresses"}. Review the details and enter a name for each apartment.`;
 		batchApartmentReview.hidden = false;
 		saveBatchApartments.hidden = false;
+		updateBatchApartmentNameState();
 	}
 
 	async function loadBatchApartmentFile(file) {
@@ -1220,6 +1520,8 @@
 		batchApartmentReview.hidden = true;
 		batchApartmentReviewList.replaceChildren();
 		batchApartmentUnnamedCount.hidden = true;
+		batchApartmentDuplicateCount.hidden = true;
+		batchApartmentExistingConflictCount.hidden = true;
 		saveBatchApartments.hidden = true;
 
 		if (!file.name.toLowerCase().endsWith(".xlsx")) {
@@ -1442,15 +1744,21 @@
 		if (saveBatchApartments.disabled || !batchApartmentForm.reportValidity()) return;
 
 		for (const candidate of pendingBatchApartments) {
-			let apartment = apartments.find((existing) => normalize(existing.address) === candidate.key);
+			let apartment = candidate.existing;
 			if (!apartment) {
 				apartment = new Apartment();
 				apartment.address = candidate.address;
 				apartments.push(apartment);
 			}
 			apartment.name = candidate.nameInput.value.trim();
-			apartment.phoneNumbers = mergeUniqueStrings(apartment.phoneNumbers, candidate.phoneNumbers);
-			apartment.teachingAreas = mergeUniqueAreas(apartment.teachingAreas, candidate.teachingAreaNames);
+			if (candidate.mergeData) {
+				apartment.address = candidate.address;
+				apartment.phoneNumbers = [...candidate.mergeData.phoneNumbers];
+				apartment.teachingAreas = mergeUniqueAreas(candidate.mergeData.areas.existing, candidate.mergeData.areas.names);
+			} else {
+				apartment.phoneNumbers = mergeUniqueStrings(apartment.phoneNumbers, candidate.phoneNumbers);
+				apartment.teachingAreas = mergeUniqueAreas(apartment.teachingAreas, candidate.teachingAreaNames);
+			}
 			apartment.visualPin = candidate.visualPin;
 		}
 
@@ -1552,9 +1860,9 @@
 		if (!overviewMap.naturalWidth || !mapScale) return;
 		renderRouteMap();
 
-		const pendingAddressKeys = new Set(pendingBatchApartments.map(({ key }) => key));
+		const pendingExistingApartments = new Set(pendingBatchApartments.map(({ existing }) => existing));
 		const savedPins = apartments
-			.filter((apartment) => !pendingAddressKeys.has(normalize(apartment.address)))
+			.filter((apartment) => !pendingExistingApartments.has(apartment))
 			.map((apartment) => ({
 				apartment,
 				visualPin: apartment === editingApartment ? editApartmentVisualPin : apartment.visualPin,

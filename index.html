@@ -410,8 +410,30 @@
 				<div class="batch-validation-errors">
 					<span class="unnamed-count" id="batch-apartment-unnamed-count" aria-live="polite" hidden></span>
 					<span class="duplicate-name-warning" id="batch-apartment-duplicate-count" role="alert" hidden></span>
+					<span class="duplicate-name-warning" id="batch-apartment-existing-conflict-count" aria-live="polite" hidden></span>
 				</div>
 				<button class="primary" id="save-batch-apartments" type="submit" hidden>Add apartments</button>
+			</footer>
+		</form>
+	</dialog>
+	<dialog class="workflow-dialog batch-comparison-dialog" id="batch-comparison-dialog" aria-labelledby="batch-comparison-title">
+		<form id="batch-comparison-form">
+			<header class="dialog-header">
+				<div>
+					<p class="eyebrow">Apartment conflict</p>
+					<h2 id="batch-comparison-title">Compare apartments</h2>
+				</div>
+			</header>
+			<label class="dialog-field" for="batch-comparison-target">Existing apartment
+				<select id="batch-comparison-target"></select>
+			</label>
+			<p class="review-intro">Choose which data to keep for each field. Changes are applied only when you add the batch.</p>
+			<p class="review-intro" id="batch-comparison-source-notice" hidden></p>
+			<div class="batch-comparison-fields" id="batch-comparison-fields"></div>
+			<footer class="dialog-actions">
+				<button class="secondary" id="batch-comparison-cancel" type="button">Cancel</button>
+				<button class="secondary" id="batch-comparison-ignore" type="button">Ignore imported card</button>
+				<button class="primary" id="batch-comparison-merge" type="submit">Stage merge</button>
 			</footer>
 		</form>
 	</dialog>
