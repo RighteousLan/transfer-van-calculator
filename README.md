@@ -12,6 +12,10 @@ Imported data is available in `window.transferVanData.missionaries` and `window.
 
 On the stop timeline, use the mouse wheel or drag the background left and right to scroll. Dragging teaching areas and missionaries still moves those items.
 
+On the call list, use the edit icon in a missionary's Notes cell to replace the generated note, then save or cancel the edit. Use the restore icon to return an edited note to its generated value. Saved notes stay available while navigating between zones and views, but are cleared when the page is reloaded or a new before board is uploaded.
+
+Use **Copy to clipboard** to copy the selected zone's table, including current note edits, for pasting into another application. Clipboard access requires browser permission.
+
 ## Apartment batch file
 
 Batch add reads the first worksheet of an `.xlsx` file by column position: teaching area in C, phone number in D, and address in E. A header row is optional. Rows with the same address are merged, keeping unique phone numbers and teaching areas for review.

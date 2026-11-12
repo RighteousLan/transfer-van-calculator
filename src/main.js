@@ -32,6 +32,8 @@
 	const callZoneSelect = requireElement("call-zone-select");
 	const callZoneEmpty = requireElement("call-zone-empty");
 	const callZoneOutput = requireElement("call-zone-output");
+	const copyCallTableButton = requireElement("copy-call-table");
+	const callCopyStatus = requireElement("call-copy-status");
 	const tripRouteSelect = requireElement("trip-route-select");
 	const tripRouteEmpty = requireElement("trip-route-empty");
 	const tripTimeline = requireElement("trip-timeline");
@@ -134,6 +136,7 @@
 	const ignoredUnindexedAreas = new Set();
 	const ignoredTransferTypeMissionaries = new Set();
 	const ignoredMissingApartmentMissionaries = new Set();
+	const callNoteOverrides = new WeakMap();
 	let hasBeforeBoard = false;
 	let hasAfterBoard = false;
 	let departingSelectionConfirmed = false;
@@ -258,6 +261,61 @@
 	});
 
 	callZoneSelect.addEventListener("change", renderCallZoneTable);
+	copyCallTableButton.addEventListener("click", async () => {
+		const table = callZoneOutput.querySelector("table");
+		if (!table) return;
+
+		const copy = table.cloneNode(true);
+		const inputs = table.querySelectorAll(".call-note-editor textarea");
+		copy.querySelectorAll(".call-note-editor").forEach((form, index) => {
+			const note = document.createElement("span");
+			note.className = "call-note-text";
+			note.textContent = inputs[index].value;
+			form.replaceWith(note);
+		});
+		copy.querySelectorAll("button").forEach((button) => button.remove());
+		copy.querySelectorAll(".call-note-text").forEach((note) => { note.style.whiteSpace = "pre-wrap"; });
+		copy.setAttribute("border", "1");
+		copy.style.borderCollapse = "collapse";
+		copy.querySelectorAll("th, td").forEach((cell) => { cell.style.border = "1px solid #000"; });
+
+		const spans = [];
+		const rows = Array.from(copy.rows, (row) => {
+			const occupied = spans.map((remaining) => remaining > 0);
+			for (let column = 0; column < spans.length; column += 1) {
+				if (spans[column] > 0) spans[column] -= 1;
+			}
+			const values = Array.from({ length: occupied.length }, () => "");
+			let column = 0;
+			for (const cell of row.cells) {
+				while (occupied[column]) column += 1;
+				values[column] = cell.textContent;
+				for (let offset = 0; offset < cell.colSpan; offset += 1) {
+					occupied[column + offset] = true;
+					if (offset > 0) values[column + offset] = "";
+					if (cell.rowSpan > 1) spans[column + offset] = cell.rowSpan - 1;
+				}
+				column += cell.colSpan;
+			}
+			return values.map((value) => /[\t\r\n"]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value).join("\t");
+		});
+		const text = rows.join("\r\n");
+		try {
+			if (!navigator.clipboard) throw new Error("Clipboard access is unavailable in this browser.");
+			if (window.ClipboardItem && navigator.clipboard.write) {
+				await navigator.clipboard.write([new window.ClipboardItem({
+					"text/plain": new Blob([text], { type: "text/plain" }),
+					"text/html": new Blob([copy.outerHTML], { type: "text/html" }),
+				})]);
+			} else {
+				await navigator.clipboard.writeText(text);
+			}
+			setStatus(callCopyStatus, "Table copied.");
+		} catch (error) {
+			const message = error instanceof Error ? error.message : "Clipboard access failed.";
+			setStatus(callCopyStatus, `Could not copy table: ${message}`, true);
+		}
+	});
 
 	let printResizeStart = null;
 	printRouteResize.addEventListener("pointerdown", (event) => {
@@ -2011,6 +2069,8 @@
 	function renderCallZoneTable() {
 		callZoneOutput.replaceChildren();
 		const zone = callZoneSelect.value === "" ? null : zones[Number(callZoneSelect.value)];
+		copyCallTableButton.disabled = !zone;
+		setStatus(callCopyStatus, "");
 		if (!zone) {
 			const empty = document.createElement("p");
 			empty.className = "empty-state";
@@ -2070,7 +2130,67 @@
 					if (missionaryNameKeys(missionary).some((name) => trainerNames.has(name))) {
 						notes.push("Training a new missionary");
 					}
-					notesCell.textContent = notes.filter(Boolean).join("; ");
+					const generatedNote = notes.filter(Boolean).join("; ");
+					const name = [missionary.type, missionary.firstName, missionary.lastName].filter(Boolean).join(" ");
+					const renderNote = (focusEdit = false) => {
+						notesCell.replaceChildren();
+						const display = document.createElement("div");
+						display.className = "call-note-display";
+						const note = document.createElement("span");
+						note.className = "call-note-text";
+						note.textContent = callNoteOverrides.get(missionary) ?? generatedNote;
+						const edit = document.createElement("button");
+						edit.type = "button";
+						edit.className = "apartment-row-action";
+						edit.title = "Edit note";
+						edit.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 5 4 4M4 20l4-.8L19 8a2.1 2.1 0 0 0-3-3L5 16l-1 4Z" /></svg>';
+						edit.setAttribute("aria-label", `Edit note for ${name}`);
+						edit.addEventListener("click", () => {
+							const form = document.createElement("form");
+							form.className = "call-note-editor";
+							const input = document.createElement("textarea");
+							input.setAttribute("aria-label", `Note for ${name}`);
+							input.value = callNoteOverrides.get(missionary) ?? generatedNote;
+							const actions = document.createElement("div");
+							actions.className = "call-note-actions";
+							const save = document.createElement("button");
+							save.type = "submit";
+							save.className = "call-note-button";
+							save.textContent = "Save";
+							const cancel = document.createElement("button");
+							cancel.type = "button";
+							cancel.className = "call-note-button";
+							cancel.textContent = "Cancel";
+							cancel.addEventListener("click", () => renderNote(true));
+							form.addEventListener("submit", (event) => {
+								event.preventDefault();
+								callNoteOverrides.set(missionary, input.value);
+								renderNote(true);
+							});
+							actions.append(save, cancel);
+							form.append(input, actions);
+							notesCell.replaceChildren(form);
+							input.focus();
+						});
+						display.append(note);
+						if (callNoteOverrides.has(missionary)) {
+							const reset = document.createElement("button");
+							reset.type = "button";
+							reset.className = "apartment-row-action";
+							reset.title = "Restore generated note";
+							reset.setAttribute("aria-label", `Restore generated note for ${name}`);
+							reset.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7L3 8" /><path d="M3 3v5h5" /></svg>';
+							reset.addEventListener("click", () => {
+								callNoteOverrides.delete(missionary);
+								renderNote(true);
+							});
+							display.append(reset);
+						}
+						display.append(edit);
+						notesCell.append(display);
+						if (focusEdit) edit.focus();
+					};
+					renderNote();
 				}
 				row.append(nameCell, transferCell, notesCell);
 				body.append(row);

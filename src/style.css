@@ -1574,6 +1574,17 @@ button.map-pin:not(:disabled):hover {
 
 .call-header { margin-bottom: 20px; }
 
+.call-copy-actions {
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: 12px;
+	margin-bottom: 16px;
+}
+
+.call-copy-status { font-size: 13px; }
+.call-copy-status.error { color: #a33d32; }
+
 .call-table-scroll {
 	max-width: 100%;
 	overflow-x: auto;
@@ -1618,6 +1629,44 @@ button.map-pin:not(:disabled):hover {
 .call-table tbody tr:last-child th, .call-table tbody tr:last-child td { border-bottom: 0; }
 
 .call-table tbody td:last-child { min-width: 180px; }
+
+.call-note-display {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+
+.call-note-text {
+	flex: 1;
+	min-width: 0;
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+}
+
+.call-note-button {
+	min-height: 32px;
+	padding: 0 10px;
+	font-size: 13px;
+}
+
+.call-note-editor textarea {
+	display: block;
+	width: 100%;
+	min-height: 70px;
+	padding: 8px;
+	border: 1px solid var(--ink);
+	border-radius: 4px;
+	color: var(--ink);
+	font: inherit;
+	resize: vertical;
+}
+
+.call-note-actions {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px;
+	margin-top: 8px;
+}
 
 .trip-timeline-viewport {
 	max-width: 100%;
