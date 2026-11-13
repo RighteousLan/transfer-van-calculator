@@ -8,12 +8,6 @@ Make the columns in the route editor more thin
 Right now you cannot reorder a secondary apartment
 
 
-
-
-Add pin menu:
-Needs to say the name of the apartment you are placing
-
-
 MODEL.JS
 Phone numbers should be on teaching areas, NOT on apartments (I think)
 
@@ -39,10 +33,18 @@ stops view:
 In the real name function, add a feature to account for people with the same last name like anderson and anderson
 
 
-adjust the site so it doesn't shift when the scroll bar is visible.
-
-
 trip-view:
-Let the user undo the ignore button by clicking it again
 When an area is renamed, it jut comes up as an area not indexed. very not epic.
-When selecting departing missionaries, display a total on the confirm button
+
+
+
+Readme:
+Explain how to use the website obv.
+- For route screen, the user should open the json from last time, and then attempt to batch add the 'after' transfer board, merging all collisions
+- read the before and after transfer board data and resolve any issues (note: explain the issues)
+- 
+
+
+
+
+Selected departing missionaries need to be removed from the stop timeline

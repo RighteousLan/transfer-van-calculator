@@ -12,6 +12,8 @@
 	font-family: "Aptos", "Segoe UI", sans-serif;
 }
 
+html { scrollbar-gutter: stable; }
+
 * { box-sizing: border-box; }
 
 body {
@@ -517,6 +519,12 @@ button svg, .upload-button svg { width: 17px; height: 17px; }
 
 .apartment-search-label { margin-bottom: 6px; }
 
+.sidebar-apartment-search {
+	flex: 0 0 auto;
+	min-height: 34px;
+	margin-top: 10px;
+}
+
 .route-draft-list, .available-apartment-list {
 	flex: 1;
 	min-height: 0;
@@ -676,12 +684,14 @@ button svg, .upload-button svg { width: 17px; height: 17px; }
 
 .collection-section {
 	display: flex;
-	flex: 1 1 50%;
+	flex: 1 1 0;
 	flex-direction: column;
 	min-height: 0;
-	padding: 18px 0;
+	padding: 18px 0 0;
 	border-top: 1px solid var(--line);
 }
+
+.routes-collection { flex: 0 1 auto; }
 
 .collection-heading {
 	display: flex;
@@ -1272,6 +1282,7 @@ button svg, .upload-button svg { width: 17px; height: 17px; }
 
 .map-viewport {
 	position: relative;
+	grid-area: 2 / 1;
 	min-width: 0;
 	min-height: 0;
 	overflow: auto;
@@ -1410,13 +1421,15 @@ button.map-pin:not(:disabled):hover {
 .routes-view.map-apartment-dragging .map-viewport { cursor: grabbing; }
 
 .pin-pick-banner {
-	position: absolute;
-	top: 14px;
-	right: 14px;
+	position: relative;
+	grid-area: 2 / 1;
+	align-self: start;
+	justify-self: end;
 	z-index: 3;
 	display: flex;
 	align-items: center;
 	gap: 12px;
+	margin: 14px;
 	max-width: calc(100% - 28px);
 	padding: 10px 12px;
 	border: 1px solid var(--line);

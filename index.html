@@ -237,7 +237,7 @@
 					<h1>Default routes</h1>
 					<p class="defaults-save-status" id="defaults-save-status" aria-live="polite">Saved defaults</p>
 				</header>
-				<section class="collection-section" aria-labelledby="routes-title">
+				<section class="collection-section routes-collection" aria-labelledby="routes-title">
 					<div class="collection-heading">
 						<h2 id="routes-title">Routes</h2>
 						<span class="collection-count" id="routes-count">0</span>
@@ -245,7 +245,7 @@
 					<ul class="collection-list" id="routes-list">
 						<li class="collection-empty">No routes yet</li>
 					</ul>
-					<button class="add-item-button" id="add-route" type="button" disabled>
+					<button class="add-item-button" id="add-route" type="button" disabled hidden>
 						<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
 						Add route
 					</button>
@@ -255,6 +255,7 @@
 						<h2 id="apartments-title">Apartments</h2>
 						<span class="collection-count" id="apartments-count">0</span>
 					</div>
+					<input class="apartment-search sidebar-apartment-search" id="sidebar-apartment-search" type="search" aria-label="Search apartments" placeholder="Name or teaching area" autocomplete="off">
 					<ul class="collection-list" id="apartments-list">
 						<li class="collection-empty">No apartments yet</li>
 					</ul>
@@ -331,10 +332,10 @@
 				<div class="map-stage" id="map-stage">
 					<img id="overview-map" src="./overview-2246341-1.png" alt="Overview map of the Philippines Dumaguete Mission" draggable="false">
 				</div>
-				<div class="pin-pick-banner" id="pin-pick-banner" hidden>
-					<span>Click or tap the map to place the apartment pin.</span>
-					<button class="secondary" id="cancel-pin-selection" type="button">Cancel pin</button>
-				</div>
+			</div>
+			<div class="pin-pick-banner" id="pin-pick-banner" hidden>
+				<span>Click or tap the map to place the apartment pin.</span>
+				<button class="secondary" id="cancel-pin-selection" type="button">Cancel pin</button>
 			</div>
 		</section>
 	</main>
@@ -511,7 +512,7 @@
 			<ul class="review-list departing-list" id="departing-missionaries-list"></ul>
 			<footer class="dialog-actions">
 				<button class="secondary" id="cancel-departing-missionaries" type="button">Cancel</button>
-				<button class="primary" type="submit">Confirm selection</button>
+				<button class="primary" id="confirm-departing-missionaries" type="submit">Confirm selection</button>
 			</footer>
 		</form>
 	</dialog>

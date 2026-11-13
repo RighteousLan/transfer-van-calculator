@@ -56,6 +56,7 @@
 	const availableApartmentList = requireElement("available-apartment-list");
 	const availableApartmentCount = requireElement("available-apartment-count");
 	const apartmentSearch = requireElement("apartment-search");
+	const sidebarApartmentSearch = requireElement("sidebar-apartment-search");
 	const saveRouteButton = requireElement("save-route");
 	const saveDefaultsButton = requireElement("save-defaults");
 	const defaultsSaveStatus = requireElement("defaults-save-status");
@@ -84,6 +85,7 @@
 	const refreshMissingApartmentsButton = requireElement("refresh-missing-apartments");
 	const departingMissionariesDialog = requireElement("departing-missionaries-dialog");
 	const departingMissionariesForm = requireElement("departing-missionaries-form");
+	const departingMissionariesConfirm = requireElement("confirm-departing-missionaries");
 	const departingMissionarySearch = requireElement("departing-missionary-search");
 	const departingMissionariesList = requireElement("departing-missionaries-list");
 	const dataSummary = requireElement("data-summary");
@@ -664,7 +666,6 @@
 
 	function renderRouteLists() {
 		routesList.replaceChildren();
-		apartmentsList.replaceChildren();
 		routesCount.textContent = String(routes.length);
 		apartmentsCount.textContent = String(apartments.length);
 
@@ -707,18 +708,32 @@
 			});
 		}
 
-		if (apartments.length === 0) {
+		renderApartmentList();
+		renderMapPins();
+	}
+
+	function apartmentMatchesSearch(apartment, query) {
+		return !query || normalize(apartment.name).includes(query)
+			|| apartment.teachingAreas.some((area) =>
+				normalize(area.nameBefore).includes(query) || normalize(area.nameAfter).includes(query));
+	}
+
+	function renderApartmentList() {
+		apartmentsList.replaceChildren();
+		const query = normalize(sidebarApartmentSearch.value.trim());
+		const matchingApartments = apartments.filter((apartment) => apartmentMatchesSearch(apartment, query));
+		if (matchingApartments.length === 0) {
 			const empty = document.createElement("li");
 			empty.className = "collection-empty";
-			empty.textContent = "No apartments yet";
+			empty.textContent = apartments.length === 0 ? "No apartments yet" : "No matching apartments";
 			apartmentsList.append(empty);
 		} else {
-			apartments.forEach((apartment, index) => {
+			matchingApartments.forEach((apartment) => {
 				const item = document.createElement("li");
 				item.className = "apartment-list-row";
 				const label = document.createElement("span");
 				label.className = "apartment-list-name";
-				label.textContent = apartment.name || apartment.address || `Apartment ${index + 1}`;
+				label.textContent = apartment.name || apartment.address || `Apartment ${apartments.indexOf(apartment) + 1}`;
 				const actions = document.createElement("div");
 				actions.className = "apartment-list-actions";
 				if (apartment.visualPin) {
@@ -750,7 +765,6 @@
 				apartmentsList.append(item);
 			});
 		}
-		renderMapPins();
 	}
 
 	function cloneRoute(route) {
@@ -969,9 +983,7 @@
 		const query = normalize(apartmentSearch.value.trim());
 		const available = apartments.filter((apartment) =>
 			!editingRouteDraft.apartments.includes(apartment)
-			&& (!query || normalize(apartment.name).includes(query)
-				|| apartment.teachingAreas.some((area) =>
-					normalize(area.nameBefore).includes(query) || normalize(area.nameAfter).includes(query))));
+			&& apartmentMatchesSearch(apartment, query));
 		availableApartmentCount.textContent = String(available.length);
 		availableApartmentList.replaceChildren();
 		if (available.length === 0) {
@@ -1500,12 +1512,16 @@
 			entry.append(partialMatchNotice, mergeNotice, addressText, phoneText, areaText, pinButton, compareButton);
 			batchApartmentReviewList.append(entry);
 			candidate.visualPin = existing?.visualPin ?? null;
-			pinButton.addEventListener("click", () => beginMapPinSelection(batchApartmentDialog, (visualPin) => {
-				candidate.visualPin = visualPin;
-				const pendingCandidate = pendingBatchApartments.find((item) => item.key === candidate.key);
-				if (pendingCandidate) pendingCandidate.visualPin = visualPin;
-				renderMapPins();
-			}));
+			pinButton.addEventListener("click", () => beginMapPinSelection(
+				batchApartmentDialog,
+				nameInput.value.trim(),
+				(visualPin) => {
+					candidate.visualPin = visualPin;
+					const pendingCandidate = pendingBatchApartments.find((item) => item.key === candidate.key);
+					if (pendingCandidate) pendingCandidate.visualPin = visualPin;
+					renderMapPins();
+				},
+			));
 			return { ...candidate, existing, nameInput, compareButton, entry, addressText, phoneText, areaNames, mergeNotice, partialMatchNotice, matches: [], order: index };
 		});
 
@@ -1627,6 +1643,7 @@
 	routeEditorBack.addEventListener("click", closeRouteEditor);
 	routeNameInput.addEventListener("input", updateRouteSaveState);
 	apartmentSearch.addEventListener("input", renderRouteEditor);
+	sidebarApartmentSearch.addEventListener("input", renderApartmentList);
 	saveRouteButton.addEventListener("click", saveRouteDraft);
 
 	requireElement("add-apartment").addEventListener("click", () => {
@@ -1638,7 +1655,7 @@
 	});
 	singleApartmentAddPin.addEventListener("click", () => {
 		if (!singleApartmentDraft) singleApartmentDraft = new Apartment();
-		beginMapPinSelection(singleApartmentDialog, (visualPin) => {
+		beginMapPinSelection(singleApartmentDialog, singleApartmentName.value.trim(), (visualPin) => {
 			singleApartmentDraft.visualPin = visualPin;
 			renderMapPins();
 		});
@@ -1668,7 +1685,7 @@
 
 	editApartmentAddPin.addEventListener("click", () => {
 		if (!editingApartment) return;
-		beginMapPinSelection(editApartmentDialog, (visualPin) => {
+		beginMapPinSelection(editApartmentDialog, editApartmentName.value.trim(), (visualPin) => {
 			editApartmentVisualPin = visualPin;
 			renderMapPins();
 		});
@@ -1954,7 +1971,7 @@
 		};
 	}
 
-	function beginMapPinSelection(dialog, onSelect) {
+	function beginMapPinSelection(dialog, apartmentName, onSelect) {
 		if (!overviewMap.naturalWidth) return;
 		pinSelectionSession = {
 			dialog,
@@ -1969,7 +1986,9 @@
 		setSidebarOpen(false);
 			routesView.classList.add("pin-picking");
 		pinPickBanner.hidden = false;
-		mapTitle.textContent = "Select apartment location";
+		mapTitle.textContent = apartmentName
+			? `Select apartment location: ${apartmentName}`
+			: "Select apartment location";
 		window.requestAnimationFrame(() => {
 			fitOverviewMap();
 			mapViewport.focus();
@@ -2019,7 +2038,6 @@
 	zoomFitButton.addEventListener("click", () => fitOverviewMap(true));
 	mapViewport.addEventListener("pointerdown", (event) => {
 		if (event.button !== 0) return;
-		if (event.target instanceof Element && event.target.closest(".pin-pick-banner")) return;
 		if (!pinSelectionSession && event.pointerType !== "mouse") return;
 		if (!pinSelectionSession && event.target instanceof Element && event.target.closest(".map-pin")) return;
 		activePanPointer = event.pointerId;
@@ -2634,8 +2652,7 @@
 		const ignoreButton = document.createElement("button");
 		ignoreButton.className = "secondary review-ignore-button";
 		ignoreButton.type = "button";
-		ignoreButton.textContent = isIgnored ? "Ignored" : "Ignore";
-		ignoreButton.disabled = isIgnored;
+		ignoreButton.textContent = isIgnored ? "Unignore" : "Ignore";
 		ignoreButton.addEventListener("click", onIgnore);
 		item.append(label, ignoreButton);
 		list.append(item);
@@ -2659,7 +2676,8 @@
 				`${areaName} · ${districtName} District · ${zoneName} Zone`,
 				isIgnored,
 				() => {
-					ignoredUnindexedAreas.add(area);
+					if (isIgnored) ignoredUnindexedAreas.delete(area);
+					else ignoredUnindexedAreas.add(area);
 					renderUnindexedAreas();
 					updateWorkflowButtons();
 				},
@@ -2690,7 +2708,8 @@
 				missionary.getRealName(),
 				isIgnored,
 				() => {
-					ignoredTransferTypeMissionaries.add(missionary);
+					if (isIgnored) ignoredTransferTypeMissionaries.delete(missionary);
+					else ignoredTransferTypeMissionaries.add(missionary);
 					renderMissingTransferTypes();
 					updateWorkflowButtons();
 				},
@@ -2714,7 +2733,8 @@
 				missionary.getRealName(),
 				isIgnored,
 				() => {
-					ignoredMissingApartmentMissionaries.add(missionary);
+					if (isIgnored) ignoredMissingApartmentMissionaries.delete(missionary);
+					else ignoredMissingApartmentMissionaries.add(missionary);
 					renderMissingApartments();
 					updateWorkflowButtons();
 				},
@@ -2761,6 +2781,8 @@
 
 	function renderDepartingMissionaries() {
 		departingMissionariesList.replaceChildren();
+		const selectedCount = [...departingSelection.values()].filter(Boolean).length;
+		departingMissionariesConfirm.textContent = `Confirm selection (${selectedCount})`;
 		const query = normalize(departingMissionarySearch.value.trim());
 		const sortedMissionaries = [...missionaries].sort((first, second) =>
 			first.lastName.localeCompare(second.lastName) || first.firstName.localeCompare(second.firstName));
@@ -2776,7 +2798,11 @@
 			const checkbox = document.createElement("input");
 			checkbox.type = "checkbox";
 			checkbox.checked = departingSelection.get(missionary) ?? false;
-			checkbox.addEventListener("change", () => departingSelection.set(missionary, checkbox.checked));
+			checkbox.addEventListener("change", () => {
+				departingSelection.set(missionary, checkbox.checked);
+				const selectedCount = [...departingSelection.values()].filter(Boolean).length;
+				departingMissionariesConfirm.textContent = `Confirm selection (${selectedCount})`;
+			});
 			const name = document.createElement("span");
 			name.textContent = missionary.getRealName();
 			label.append(checkbox, name);
