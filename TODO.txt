@@ -36,7 +36,6 @@ trip-view:
 When an area is renamed, it jut comes up as an area not indexed. very not epic.
 
 
-
 Readme:
 Explain how to use the website obv.
 - For route screen, the user should open the json from last time, and then attempt to batch add the 'after' transfer board, merging all collisions

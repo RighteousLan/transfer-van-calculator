@@ -2612,7 +2612,7 @@
 			unindexedAreasButton,
 			hasBeforeBoard ? `Areas not indexed (${unindexedCount})` : "Areas not indexed",
 			!hasBeforeBoard ? "none" : (unindexedCount > 0 ? "warning" : "complete"),
-			!hasBeforeBoard || unindexedCount === 0,
+			!hasBeforeBoard /*|| unindexedCount === 0*/,
 		);
 
 		const boardsReady = hasBeforeBoard && hasAfterBoard;
@@ -3316,6 +3316,9 @@
 				`Should not be here: ${formatNames(houseAfterValidation.unexpected)}`,
 			].join("\n");
 		}
+		if (plans.route.time === TripTime.Morning && houseAfterValidation.isInvalid) {
+			houseAfterBox.title = "There should never be one missionary alone in the apartment.";
+		}
 		stopElement.append(
 			house,
 			createTripBox(stop, "house-before", "In house before", houseBefore),
@@ -3708,9 +3711,9 @@
 
 		const beforeArea = missionary.areaBefore;
 		const afterArea = missionary.areaAfter;
-		if (!afterArea || afterArea.index === null || (beforeArea && beforeArea.index === null)) return null;
-		//if (!afterArea) return beforeArea ? TransferType.ULI : null;
-		//if (afterArea.index === null || (beforeArea && beforeArea.index === null)) return null;
+		//if (!afterArea || afterArea.index === null || (beforeArea && beforeArea.index === null)) return null;
+		if (!afterArea) return beforeArea ? TransferType.ULI : null;
+		if (afterArea.index === null || (beforeArea && beforeArea.index === null)) return null;
 
 		const beforeIndex = beforeArea?.index ?? 0;
 		const afterIndex = afterArea.index;
@@ -3788,7 +3791,6 @@
 							missionary.areaAfter = area;
 				missionary.positionAfter = assignment.position;
 				missionary.compAfter = assignment.companion;
-				missionary.transferType = calculateTransferType(missionary);
 			}
 		}
 
@@ -3816,6 +3818,9 @@
 		try {
 			const assignments = await readAssignments(file, period);
 			const result = applyAssignments(assignments, period);
+			missionaries.forEach((missionary) => { //CALCULATE TRANSFER TYPES FOR ALL MISSIONARIES
+				missionary.transferType = calculateTransferType(missionary);
+			});
 			if (period === "before") {
 				hasBeforeBoard = true;
 				hasAfterBoard = false;
