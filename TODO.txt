@@ -11,9 +11,7 @@ MODEL.JS
 Phone numbers should be on teaching areas, NOT on apartments (I think)
 
 Define Defaults screen
-Little search and filter buttons for the appartments list
 It is loading the defaults incorrectly right now. IF there is no cache, look in the JSON. IF there is not Json, just load the four.
-I think you can just remove the new route button all together and assume it to always be the main four. (also makes more room for apartment list)
 
 
 home view:
@@ -25,7 +23,6 @@ print view:
 
 stops view:
 -Routes should calculate who must be picked up and dropped off and place them that way, !and visually identify them!?
--purple buttons if they have been edited by the user
 
 
 
@@ -42,3 +39,9 @@ Explain how to use the website obv.
 - read the before and after transfer board data and resolve any issues (note: explain the issues)
 - 
 
+
+If a missionary is moved into or out of the van by the computer. Their card on the stop should have a title that explains it.
+
+TODO: housebefore and van before need to have a different css altogether
+
+Renamed district causes transfer without van  (index detetion)

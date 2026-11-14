@@ -13,6 +13,9 @@ Imported data is available in `window.transferVanData.missionaries` and `window.
 In the missing transfer types review, use **Departing** to mark a missionary's transfer type as ULI.
 
 On the stop timeline, use the mouse wheel or drag the background left and right to scroll. Dragging teaching areas and missionaries still moves those items.
+Senior and departing missionaries are excluded from the stop timeline, its validation, and the print timeline.
+Moving a teaching area to another morning stop resets its missionaries' previous manual placements and recalculates their van movements from the new stop.
+If an earlier edit means a missionary is no longer on the van at a later stop, their later drop-off is removed. Expected but missing missionaries may still appear as faded tokens.
 
 On the call list, use the edit icon in a missionary's Notes cell to replace the generated note, then save or cancel the edit. Use the restore icon to return an edited note to its generated value. Saved notes stay available while navigating between zones and views, but are cleared when the page is reloaded or a new before board is uploaded.
 

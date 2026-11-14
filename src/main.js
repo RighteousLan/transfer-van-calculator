@@ -2120,6 +2120,52 @@
 		changeMapScale(mapScale * factor, event.clientX - bounds.left, event.clientY - bounds.top);
 	}, { passive: false });
 	let timelinePan = null;
+	let tripAreaAutoScrollFrame = null;
+	let tripAreaAutoScrollDirection = 0;
+	function stopTripAreaAutoScroll() {
+		tripAreaAutoScrollDirection = 0;
+		if (tripAreaAutoScrollFrame !== null) {
+			cancelAnimationFrame(tripAreaAutoScrollFrame);
+			tripAreaAutoScrollFrame = null;
+		}
+	}
+	function continueTripAreaAutoScroll() {
+		tripAreaAutoScrollFrame = null;
+		if (!tripAreaDrag || tripAreaAutoScrollDirection === 0) return;
+		const maxScrollLeft = tripTimelineViewport.scrollWidth - tripTimelineViewport.clientWidth;
+		if ((tripAreaAutoScrollDirection < 0 && tripTimelineViewport.scrollLeft <= 0)
+			|| (tripAreaAutoScrollDirection > 0 && tripTimelineViewport.scrollLeft >= maxScrollLeft)) {
+			tripAreaAutoScrollDirection = 0;
+			return;
+		}
+		tripTimelineViewport.scrollLeft += tripAreaAutoScrollDirection * 12;
+		tripAreaAutoScrollFrame = requestAnimationFrame(continueTripAreaAutoScroll);
+	}
+	tripTimelineViewport.addEventListener("dragover", (event) => {
+		if (!tripAreaDrag) return;
+		const bounds = tripTimelineViewport.getBoundingClientRect();
+		const edgeWidth = Math.min(64, bounds.width / 4);
+		tripAreaAutoScrollDirection = event.clientX <= bounds.left + edgeWidth
+			? -1
+			: event.clientX >= bounds.right - edgeWidth
+				? 1
+				: 0;
+		if ((tripAreaAutoScrollDirection < 0 && tripTimelineViewport.scrollLeft <= 0)
+			|| (tripAreaAutoScrollDirection > 0
+				&& tripTimelineViewport.scrollLeft >= tripTimelineViewport.scrollWidth - tripTimelineViewport.clientWidth)) {
+			tripAreaAutoScrollDirection = 0;
+		}
+		if (tripAreaAutoScrollDirection === 0) {
+			stopTripAreaAutoScroll();
+		} else if (tripAreaAutoScrollFrame === null) {
+			tripAreaAutoScrollFrame = requestAnimationFrame(continueTripAreaAutoScroll);
+		}
+	});
+	tripTimelineViewport.addEventListener("dragleave", (event) => {
+		if (!(event.relatedTarget instanceof Node) || !tripTimelineViewport.contains(event.relatedTarget)) {
+			stopTripAreaAutoScroll();
+		}
+	});
 	tripTimelineViewport.addEventListener("pointerdown", (event) => {
 		if (event.pointerType !== "mouse" || event.button !== 0 || timelinePan
 			|| tripTimelineViewport.scrollWidth <= tripTimelineViewport.clientWidth) return;
@@ -2906,7 +2952,13 @@
 					break;
 				}
 			}
-			routePlan = { route, stops: new Map(), areaEntries, missionaryAreaEntries };
+			routePlan = {
+				route,
+				stops: new Map(),
+				areaEntries,
+				missionaryAreaEntries,
+				manualMoveOrigins: new Map(),
+			};
 			tripPlansByRoute.set(route, routePlan);
 		}
 		return routePlan;
@@ -3036,15 +3088,21 @@
 				areaNames.has(normalize(area.nameBefore)) || areaNames.has(normalize(area.nameAfter))));
 	}
 
+	function isTripMissionaryExcluded(missionary) {
+		return missionary.type === MissionaryType.Senior
+			|| missionary.transferType === TransferType.ULI
+			|| departingSelection.get(missionary);
+	}
+
 	function getTripHouseAfterValidation(routePlan, stop, plan) {
 		const actual = new Set([...plan.houseAfter, ...plan.alighting, ...plan.automaticDropOff]
-			.filter((missionary) => missionary.transferType !== TransferType.ULI));
+			.filter((missionary) => !isTripMissionaryExcluded(missionary)));
 		if (routePlan.route.time === TripTime.Morning) {
 			return { isInvalid: actual.size === 1, missing: [], unexpected: [] };
 		}
 
 		const expected = new Set(missionaries.filter((missionary) =>
-			missionary.transferType !== TransferType.ULI
+			!isTripMissionaryExcluded(missionary)
 			&& missionaryAfterAreaIsAtStop(missionary, routePlan, stop)));
 		const missing = [...expected].filter((missionary) => !actual.has(missionary));
 		const unexpected = [...actual].filter((missionary) => !expected.has(missionary));		
@@ -3076,6 +3134,9 @@
 				plan.automaticPickUp.add(missionary);
 			}
 
+			for (const missionary of plan.alighting) {
+				if (!vanBefore.includes(missionary)) plan.alighting.delete(missionary);
+			}
 			const vanAfterBeforeDropOff = [...new Set([
 				...vanBefore.filter((missionary) => !plan.alighting.has(missionary)),
 				...plan.boarding,
@@ -3131,7 +3192,10 @@
 				event.dataTransfer.setData("text/plain", "teaching-area");
 			}
 		});
-		areaButton.addEventListener("dragend", () => { tripAreaDrag = null; });
+		areaButton.addEventListener("dragend", () => {
+			tripAreaDrag = null;
+			stopTripAreaAutoScroll();
+		});
 		return areaButton;
 	}
 
@@ -3160,7 +3224,24 @@
 			if (!sourceEntries || !destinationEntries || !sourceEntries.delete(drag.entry)) return;
 			destinationEntries.add(drag.entry);
 			drag.entry.currentApartment = stop.primaryApartment;
+			if (routePlan.route.time === TripTime.Morning && !stop.apartments.includes(drag.sourceApartment)) {
+				for (const [missionary, entry] of routePlan.missionaryAreaEntries) {
+					if (entry !== drag.entry) continue;
+					for (const plan of routePlan.stops.values()) {
+						plan.houseBefore.delete(missionary);
+						plan.houseBeforeSnapshot.delete(missionary);
+						plan.houseAfter.delete(missionary);
+						plan.houseAfterOverrides.delete(missionary);
+						plan.boarding.delete(missionary);
+						plan.automaticPickUp.delete(missionary);
+						plan.alighting.delete(missionary);
+						plan.automaticDropOff.delete(missionary);
+					}
+					routePlan.manualMoveOrigins.delete(missionary);
+				}
+			}
 			tripAreaDrag = null;
+			stopTripAreaAutoScroll();
 			refreshTripHouseBefore(routePlan);
 			renderTripTimeline(routePlan.route);
 		});
@@ -3177,10 +3258,11 @@
 		return teachingAreas;
 	}
 
-	function createTripMissionary(missionary, stop, source, draggable = false) {
-		if (departingSelection.get(missionary)) return null;
+	function createTripMissionary(missionary, stop, source, draggable = false, manuallyMoved = false) {
+		if (isTripMissionaryExcluded(missionary)) return null;
 		const token = document.createElement("button");
 		token.className = "trip-missionary";
+		token.classList.toggle("is-moved", manuallyMoved);
 		token.type = "button";
 		token.textContent = missionary.getRealName() || "Unidentified missionary";
 		token.draggable = draggable;
@@ -3199,17 +3281,69 @@
 		return token;
 	}
 
-	function createTripBox(stop, areaClass, title, members, draggableMembers = new Set(), acceptsDrop = false) {
+	function createTripBox(
+		stop,
+		areaClass,
+		title,
+		members,
+		draggableMembers = new Set(),
+		acceptsDrop = false,
+		manuallyMovedMissionaries = new Set(),
+		validation = null,
+	) {
 		const box = document.createElement("section");
 		box.className = `trip-box ${areaClass}`;
 		const heading = document.createElement("h3");
 		heading.textContent = title;
+		const headingRow = document.createElement("div");
+		headingRow.className = "trip-box-heading";
+		headingRow.append(heading);
+		if (areaClass === "house-after") {
+			const infoButton = document.createElement("button");
+			infoButton.type = "button";
+			infoButton.className = "trip-box-info-button";
+			infoButton.textContent = "i";
+			infoButton.setAttribute("aria-label", "Show information about this issue");
+			infoButton.setAttribute("aria-expanded", "false");
+			const infoPanel = document.createElement("div");
+			infoPanel.className = "trip-box-info-panel";
+			infoPanel.hidden = true;
+			infoPanel.setAttribute("role", "note");
+			infoButton.addEventListener("click", () => {
+				infoPanel.hidden = !infoPanel.hidden;
+				infoButton.setAttribute("aria-expanded", String(!infoPanel.hidden));
+			});
+			headingRow.append(infoButton);
+			box.append(headingRow, infoPanel);
+		} else {
+			box.append(headingRow);
+		}
 		const list = document.createElement("ul");
 		list.className = "trip-box-list";
 		list.setAttribute("aria-label", title);
-		for (const missionary of members) {
-			const token = createTripMissionary(missionary, stop, areaClass, draggableMembers.has(missionary));
+		if (!title.includes("before")) list.classList.add("two-column");
+		const missingMembers = new Set(validation?.missing ?? []);
+		const unexpectedMembers = new Set(validation?.unexpected ?? []);
+		const sortedMembers = [...members, ...missingMembers].sort((first, second) =>
+			Number(missingMembers.has(first)) - Number(missingMembers.has(second))
+			|| Number(manuallyMovedMissionaries.has(second)) - Number(manuallyMovedMissionaries.has(first)));
+		for (const missionary of sortedMembers) {
+			const token = createTripMissionary(
+				missionary,
+				stop,
+				areaClass,
+				draggableMembers.has(missionary) && !missingMembers.has(missionary),
+				manuallyMovedMissionaries.has(missionary),
+			);
 			if (!token) continue;
+			if (missingMembers.has(missionary)) {
+				token.classList.add("is-missing");
+				token.setAttribute("aria-label", `${token.textContent} (expected, but missing)`);
+				token.title = "Expected here, but missing";
+			} else if (unexpectedMembers.has(missionary)) {
+				token.classList.add("is-unexpected");
+				token.setAttribute("aria-label", `${token.textContent} (should not be here)`);
+			}
 			const item = document.createElement("li");
 			item.append(token);
 			list.append(item);
@@ -3220,7 +3354,7 @@
 			empty.textContent = "None";
 			list.append(empty);
 		}
-		box.append(heading, list);
+		box.append(list);
 		if (acceptsDrop) {
 			box.addEventListener("dragover", (event) => {
 				if (!tripDrag || tripDrag.stop !== stop || !isTripDropAllowed(tripDrag.source, areaClass)) return;
@@ -3250,8 +3384,15 @@
 	}
 
 	function moveTripMissionary(stop, missionary, source, destination) {
-		const plan = getTripStopPlan(getTripRoutePlans(activeTripRoute), stop);
+		const routePlan = getTripRoutePlans(activeTripRoute);
+		const plan = getTripStopPlan(routePlan, stop);
 		if (!plan || !isTripDropAllowed(source, destination)) return;
+		const moveOrigin = routePlan.manualMoveOrigins.get(missionary);
+		if (moveOrigin?.stop === stop && moveOrigin.source === destination) {
+			routePlan.manualMoveOrigins.delete(missionary);
+		} else if (!moveOrigin || routePlan.route.stops.indexOf(stop) < routePlan.route.stops.indexOf(moveOrigin.stop)) {
+			routePlan.manualMoveOrigins.set(missionary, { stop, source });
+		}
 		if (source === "house-after") {
 			plan.houseAfter.delete(missionary);
 			plan.houseAfterOverrides.add(missionary);
@@ -3275,6 +3416,12 @@
 
 	function renderTripStop(stop, index, plans, vanBefore) {
 		const plan = getTripStopPlan(plans, stop);
+		const manuallyMovedMissionaries = new Set([...plans.manualMoveOrigins]
+			.filter(([, origin]) => {
+				const originIndex = plans.route.stops.indexOf(origin.stop);
+				return originIndex >= 0 && originIndex <= index;
+			})
+			.map(([missionary]) => missionary));
 		const houseBefore = [...plan.houseBefore];
 		const houseAfter = [...new Set([...plan.houseAfter, ...plan.alighting, ...plan.automaticDropOff])];
 		const draggableHouseAfter = new Set(houseAfter.filter((missionary) =>
@@ -3296,6 +3443,7 @@
 		const houseName = document.createElement("h2");
 		houseName.textContent = primaryApartment?.name || primaryApartment?.address || "Unnamed apartment";
 		house.append(houseLabel, houseName, createTripTeachingAreas(stop, plans));
+		const houseAfterValidation = getTripHouseAfterValidation(plans, stop, plan);
 		const houseAfterBox = createTripBox(
 			stop,
 			"house-after",
@@ -3303,25 +3451,40 @@
 			houseAfter,
 			draggableHouseAfter,
 			true,
+			manuallyMovedMissionaries,
+			plans.route.time === TripTime.Afternoon ? houseAfterValidation : null,
 		);
-		const houseAfterValidation = getTripHouseAfterValidation(plans, stop, plan);
 		houseAfterBox.classList.toggle("is-invalid", houseAfterValidation.isInvalid);
+		const houseAfterInfoButton = houseAfterBox.querySelector(".trip-box-info-button");
+		const houseAfterInfoPanel = houseAfterBox.querySelector(".trip-box-info-panel");
+		houseAfterInfoButton.hidden = !houseAfterValidation.isInvalid;
+		let houseAfterIssueTitle = "";
+		let houseAfterIssueDescription = "";
 		if (plans.route.time === TripTime.Afternoon && houseAfterValidation.isInvalid) {
 			const formatNames = (members) => members
 				.map((missionary) => missionary.getRealName() || "Unidentified missionary")
 				.sort((first, second) => first.localeCompare(second))
 				.join(", ") || "None";
-			houseAfterBox.title = [
+			houseAfterIssueTitle = [
 				`Missing: ${formatNames(houseAfterValidation.missing)}`,
 				`Should not be here: ${formatNames(houseAfterValidation.unexpected)}`,
 			].join("\n");
+			houseAfterIssueDescription = "This list does not match the missionaries expected to be in this area after the afternoon trip. Check who should be here, then correct the van pick-up or drop-off assignments and the in-house list.";
+			if (plans.route.stops[0] === stop) {
+				houseAfterIssueDescription += " At the first stop, extra people may be missionaries carried over from morning trips who did not get off the van, or people who need to be manually added to the van, including missionaries assigned to other routes.";
+			}
 		}
 		if (plans.route.time === TripTime.Morning && houseAfterValidation.isInvalid) {
-			houseAfterBox.title = "There should never be one missionary alone in the apartment.";
+			houseAfterIssueTitle = "There should never be one missionary alone in the apartment.";
+			houseAfterIssueDescription = "This can happen when the stop's pick-ups or drop-offs leave exactly one missionary in the apartment. Review the van assignments and adjust who gets on or off so no one is left alone.";
+		}
+		if (houseAfterValidation.isInvalid) {
+			houseAfterBox.title = houseAfterIssueTitle;
+			houseAfterInfoPanel.textContent = `${houseAfterIssueTitle}\n\n${houseAfterIssueDescription}`;
 		}
 		stopElement.append(
 			house,
-			createTripBox(stop, "house-before", "In house before", houseBefore),
+			createTripBox(stop, "house-before", "In house before", houseBefore, new Set(), false, manuallyMovedMissionaries),
 			houseAfterBox,
 			createTripBox(
 				stop,
@@ -3330,6 +3493,7 @@
 				[...plan.boarding],
 				new Set([...plan.boarding].filter((missionary) => !plan.automaticPickUp.has(missionary))),
 				true,
+				manuallyMovedMissionaries,
 			),
 		);
 
@@ -3345,6 +3509,7 @@
 				[...new Set([...plan.alighting, ...plan.automaticDropOff])],
 				new Set([...plan.alighting].filter((missionary) => !plan.automaticDropOff.has(missionary))),
 				true,
+				manuallyMovedMissionaries,
 			),
 			createTripBox(
 				stop,
@@ -3356,8 +3521,9 @@
 					&& !plan.automaticPickUp.has(missionary)
 					&& !plan.automaticDropOff.has(missionary))),
 				true,
+				manuallyMovedMissionaries,
 			),
-			createTripBox(stop, "van-before", "In the van before", vanBefore),
+			createTripBox(stop, "van-before", "In the van before", vanBefore, new Set(), false, manuallyMovedMissionaries),
 		);
 
 		const vanFigure = document.createElement("div");
@@ -3493,8 +3659,9 @@
 
 		for (const [index, stop] of route.stops.entries()) {
 			const plan = getTripStopPlan(plans ?? getTripRoutePlans(route), stop);
-			const pickUps = [...plan.boarding];
-			const dropOffs = [...new Set([...plan.alighting, ...plan.automaticDropOff])];
+			const pickUps = [...plan.boarding].filter((missionary) => !isTripMissionaryExcluded(missionary));
+			const dropOffs = [...new Set([...plan.alighting, ...plan.automaticDropOff])]
+				.filter((missionary) => !isTripMissionaryExcluded(missionary));
 			const isMissionOffice = (route.time === TripTime.Morning && index === route.stops.length - 1)
 				|| (route.time === TripTime.Afternoon && index === 0);
 			const officeMembers = route.time === TripTime.Morning ? dropOffs : pickUps;
