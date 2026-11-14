@@ -2642,7 +2642,7 @@
 		list.append(item);
 	}
 
-	function appendReviewItem(list, text, isIgnored, onIgnore) {
+	function appendReviewItem(list, text, isIgnored, onIgnore, onDeparting = null) {
 		const item = document.createElement("li");
 		item.className = "review-item";
 		item.classList.toggle("is-ignored", isIgnored);
@@ -2655,6 +2655,14 @@
 		ignoreButton.textContent = isIgnored ? "Unignore" : "Ignore";
 		ignoreButton.addEventListener("click", onIgnore);
 		item.append(label, ignoreButton);
+		if (onDeparting) {
+			const departingButton = document.createElement("button");
+			departingButton.className = "secondary review-ignore-button";
+			departingButton.type = "button";
+			departingButton.textContent = "Departing";
+			departingButton.addEventListener("click", onDeparting);
+			item.append(departingButton);
+		}
 		list.append(item);
 	}
 
@@ -2712,6 +2720,13 @@
 					else ignoredTransferTypeMissionaries.add(missionary);
 					renderMissingTransferTypes();
 					updateWorkflowButtons();
+				},
+				() => {
+					missionary.transferType = TransferType.ULI;
+					departingSelection.set(missionary, true);
+					ignoredTransferTypeMissionaries.delete(missionary);
+					renderMissingTransferTypes();
+					renderImportedData();
 				},
 			);
 		}
@@ -2982,13 +2997,15 @@
 	}
 
 	function getTripHouseAfterValidation(routePlan, stop, plan) {
-		const actual = new Set([...plan.houseAfter, ...plan.alighting, ...plan.automaticDropOff]);
+		const actual = new Set([...plan.houseAfter, ...plan.alighting, ...plan.automaticDropOff]
+			.filter((missionary) => missionary.transferType !== TransferType.ULI));
 		if (routePlan.route.time === TripTime.Morning) {
 			return { isInvalid: actual.size === 1, missing: [], unexpected: [] };
 		}
 
 		const expected = new Set(missionaries.filter((missionary) =>
-			missionaryAfterAreaIsAtStop(missionary, routePlan, stop)));
+			missionary.transferType !== TransferType.ULI
+			&& missionaryAfterAreaIsAtStop(missionary, routePlan, stop)));
 		const missing = [...expected].filter((missionary) => !actual.has(missionary));
 		const unexpected = [...actual].filter((missionary) => !expected.has(missionary));		
 		return { isInvalid: missing.length > 0 || unexpected.length > 0, missing, unexpected };
@@ -3121,6 +3138,7 @@
 	}
 
 	function createTripMissionary(missionary, stop, source, draggable = false) {
+		if (departingSelection.get(missionary)) return null;
 		const token = document.createElement("button");
 		token.className = "trip-missionary";
 		token.type = "button";
@@ -3149,17 +3167,18 @@
 		const list = document.createElement("ul");
 		list.className = "trip-box-list";
 		list.setAttribute("aria-label", title);
-		if (members.length === 0) {
+		for (const missionary of members) {
+			const token = createTripMissionary(missionary, stop, areaClass, draggableMembers.has(missionary));
+			if (!token) continue;
+			const item = document.createElement("li");
+			item.append(token);
+			list.append(item);
+		}
+		if (list.childElementCount === 0) {
 			const empty = document.createElement("li");
 			empty.className = "trip-box-empty";
 			empty.textContent = "None";
 			list.append(empty);
-		} else {
-			for (const missionary of members) {
-				const item = document.createElement("li");
-				item.append(createTripMissionary(missionary, stop, areaClass, draggableMembers.has(missionary)));
-				list.append(item);
-			}
 		}
 		box.append(heading, list);
 		if (acceptsDrop) {
@@ -3650,6 +3669,8 @@
 		const beforeArea = missionary.areaBefore;
 		const afterArea = missionary.areaAfter;
 		if (!afterArea || afterArea.index === null || (beforeArea && beforeArea.index === null)) return null;
+		//if (!afterArea) return beforeArea ? TransferType.ULI : null;
+		//if (afterArea.index === null || (beforeArea && beforeArea.index === null)) return null;
 
 		const beforeIndex = beforeArea?.index ?? 0;
 		const afterIndex = afterArea.index;

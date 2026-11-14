@@ -10,6 +10,8 @@ The first worksheet in each `.xlsx` transfer board should include first and last
 
 Imported data is available in `window.transferVanData.missionaries` and `window.transferVanData.zones` for subsequent website functionality.
 
+In the missing transfer types review, use **Departing** to mark a missionary's transfer type as ULI.
+
 On the stop timeline, use the mouse wheel or drag the background left and right to scroll. Dragging teaching areas and missionaries still moves those items.
 
 On the call list, use the edit icon in a missionary's Notes cell to replace the generated note, then save or cancel the edit. Use the restore icon to return an edited note to its generated value. Saved notes stay available while navigating between zones and views, but are cleared when the page is reloaded or a new before board is uploaded.

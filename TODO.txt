@@ -25,7 +25,7 @@ print view:
 - TRAVEL TIMES :c
 
 stops view:
--Routes should calculate who must be picked up and dropped off and place them that way, and visually identify them
+-Routes should calculate who must be picked up and dropped off and place them that way, !and visually identify them!?
 -purple buttons if they have been edited by the user
 
 
@@ -44,7 +44,3 @@ Explain how to use the website obv.
 - read the before and after transfer board data and resolve any issues (note: explain the issues)
 - 
 
-
-
-
-Selected departing missionaries need to be removed from the stop timeline
