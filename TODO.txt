@@ -5,7 +5,6 @@ Move the batch add button to be nicer. (inside the menu of the Add button)
 ROUTE EDITOR
 Should I add the Edit apartment button to the route list?
 Make the columns in the route editor more thin
-Right now you cannot reorder a secondary apartment
 
 
 MODEL.JS

@@ -159,7 +159,7 @@
 	let tripAreaDrag = null;
 	let editingRouteDraft = null;
 	let editingRouteIndex = null;
-	let draggedRouteStop = null;
+	let draggedRouteItem = null;
 	let mapApartmentDrag = null;
 	const apartmentForMapPin = new WeakMap();
 	const suppressNextMapPinClick = new WeakSet();
@@ -802,7 +802,7 @@
 	function closeRouteEditor() {
 		editingRouteDraft = null;
 		editingRouteIndex = null;
-		draggedRouteStop = null;
+		draggedRouteItem = null;
 		mapApartmentDrag = null;
 		routeEditorView.hidden = true;
 		routeListView.hidden = false;
@@ -898,27 +898,46 @@
 				const stopRow = document.createElement("li");
 				stopRow.className = "route-stop-row";
 				stopRow.addEventListener("dragover", (event) => {
-					if (!draggedRouteStop) return;
+					if (!draggedRouteItem) return;
 					event.preventDefault();
 					const droppingOnApartment = event.target instanceof Element
 						&& event.target.closest(".route-stop-primary, .route-secondary-row");
-					stopRow.classList.toggle("merge-target", Boolean(droppingOnApartment && draggedRouteStop !== stop));
+					const canMerge = droppingOnApartment && (
+						draggedRouteItem.type === "stop"
+							? draggedRouteItem.stop !== stop
+							: draggedRouteItem.sourceStop !== stop
+					);
+					stopRow.classList.toggle("merge-target", Boolean(canMerge));
 					stopRow.classList.toggle("drag-target", !droppingOnApartment);
 				});
 				stopRow.addEventListener("dragleave", () => stopRow.classList.remove("drag-target", "merge-target"));
 				stopRow.addEventListener("drop", (event) => {
-					if (!draggedRouteStop) return;
+					if (!draggedRouteItem) return;
 					event.preventDefault();
 					stopRow.classList.remove("drag-target", "merge-target");
-					const sourceStop = draggedRouteStop;
-					draggedRouteStop = null;
+					const draggedItem = draggedRouteItem;
+					draggedRouteItem = null;
 					const droppingOnApartment = event.target instanceof Element
 						&& event.target.closest(".route-stop-primary, .route-secondary-row");
-					if (droppingOnApartment && sourceStop !== stop) editingRouteDraft.mergeStops(sourceStop, stop);
-					else {
+					if (draggedItem.type === "stop") {
+						if (droppingOnApartment && draggedItem.stop !== stop) {
+							editingRouteDraft.mergeStops(draggedItem.stop, stop);
+						} else if (!droppingOnApartment) {
+							const bounds = stopRow.getBoundingClientRect();
+							const insertionIndex = event.clientY < bounds.top + bounds.height / 2 ? index : index + 1;
+							reorderRouteStops(draggedItem.stop, insertionIndex);
+						}
+					} else if (droppingOnApartment) {
+						if (draggedItem.sourceStop !== stop) {
+							editingRouteDraft.removeApartment(draggedItem.apartment);
+							editingRouteDraft.addSecondaryApartment(stop, draggedItem.apartment);
+						}
+					} else {
 						const bounds = stopRow.getBoundingClientRect();
 						const insertionIndex = event.clientY < bounds.top + bounds.height / 2 ? index : index + 1;
-						reorderRouteStops(sourceStop, insertionIndex);
+						editingRouteDraft.removeApartment(draggedItem.apartment);
+						const newStop = editingRouteDraft.addStop(draggedItem.apartment);
+						reorderRouteStops(newStop, insertionIndex);
 					}
 					renderRouteEditor();
 				});
@@ -933,7 +952,7 @@
 				handle.title = "Drag to reorder or drop on an apartment to combine stops";
 				handle.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M7 6h10M7 12h10M7 18h10" /></svg>';
 				handle.addEventListener("dragstart", (event) => {
-					draggedRouteStop = stop;
+					draggedRouteItem = { type: "stop", stop };
 					stopRow.classList.add("is-dragging");
 					if (event.dataTransfer) {
 						event.dataTransfer.effectAllowed = "move";
@@ -941,7 +960,7 @@
 					}
 				});
 				handle.addEventListener("dragend", () => {
-					draggedRouteStop = null;
+					draggedRouteItem = null;
 					renderRouteEditor();
 				});
 
@@ -963,6 +982,27 @@
 					for (const secondaryApartment of stop.secondaryApartments) {
 						const secondaryRow = document.createElement("li");
 						secondaryRow.className = "route-secondary-row";
+
+						const secondaryHandle = document.createElement("button");
+						secondaryHandle.className = "route-reorder-handle";
+						secondaryHandle.type = "button";
+						secondaryHandle.draggable = true;
+						secondaryHandle.setAttribute("aria-label", `Move ${secondaryApartment.name || secondaryApartment.address || "secondary apartment"}`);
+						secondaryHandle.title = "Drag to make this a stop or drop it on another stop to combine";
+						secondaryHandle.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M7 6h10M7 12h10M7 18h10" /></svg>';
+						secondaryHandle.addEventListener("dragstart", (event) => {
+							draggedRouteItem = { type: "apartment", apartment: secondaryApartment, sourceStop: stop };
+							secondaryRow.classList.add("is-dragging");
+							if (event.dataTransfer) {
+								event.dataTransfer.effectAllowed = "move";
+								event.dataTransfer.setData("text/plain", String(index));
+							}
+						});
+						secondaryHandle.addEventListener("dragend", () => {
+							draggedRouteItem = null;
+							renderRouteEditor();
+						});
+
 						const secondaryName = document.createElement("span");
 						secondaryName.className = "route-apartment-name";
 						secondaryName.textContent = secondaryApartment.name || secondaryApartment.address || "Secondary apartment";
@@ -971,7 +1011,7 @@
 						const secondaryPin = createApartmentPinButton(secondaryApartment);
 						if (secondaryPin) secondaryActions.append(secondaryPin);
 						secondaryActions.append(createMoveButton(secondaryApartment.name || "apartment", "from-route", () => removeApartmentFromDraft(secondaryApartment)));
-						secondaryRow.append(secondaryName, secondaryActions);
+						secondaryRow.append(secondaryHandle, secondaryName, secondaryActions);
 						secondaryList.append(secondaryRow);
 					}
 					stopRow.append(secondaryList);
