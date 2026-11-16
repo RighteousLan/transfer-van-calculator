@@ -91,7 +91,7 @@
 				</section>
 			</div>
 			<div class="placeholders" aria-label="Transfer review">
-				<!--button class="placeholder" id="renamed-areas-button" type="button" disabled></button-->
+				<button class="placeholder" id="renamed-areas-button" type="button" disabled></button>
 				<button class="placeholder" id="unindexed-areas-button" type="button" disabled></button>
 				<button class="placeholder" id="missing-transfer-types-button" type="button" disabled></button>
 				<button class="placeholder" id="missing-apartments-button" type="button" disabled></button>
@@ -453,6 +453,38 @@
 				<button class="primary" id="defaults-confirm-accept" type="button">Save defaults</button>
 			</footer>
 		</div>
+	</dialog>
+	<dialog class="workflow-dialog review-dialog renamed-dialog" id="renamed-areas-dialog" aria-labelledby="renamed-areas-title">
+		<header class="dialog-header">
+			<div>
+				<p class="eyebrow">Transfer review</p>
+				<h2 id="renamed-areas-title">Review renamed locations</h2>
+			</div>
+			<button class="review-reindex-button" id="recalculate-renamed-areas" type="button" aria-label="Recalculate renamed locations" title="Recalculate renamed locations">
+				<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 7v5h-5M4 17v-5h5" /><path d="M5.6 9a7 7 0 0 1 11.6-2L20 12M4 12l2.8 5a7 7 0 0 0 11.6-2" /></svg>
+			</button>
+		</header>
+		<p class="review-intro">Select or drag a location to pair it with a location in the other list. Teaching areas can be paired when their indexes match or either area is unindexed.</p>
+		<div class="renamed-tabs" role="group" aria-label="Location type">
+			<button class="secondary" type="button" data-renamed-tab="zone" aria-pressed="true">Zones (<span data-renamed-count>0</span>)</button>
+			<button class="secondary" type="button" data-renamed-tab="district" aria-pressed="false">Districts (<span data-renamed-count>0</span>)</button>
+			<button class="secondary" type="button" data-renamed-tab="area" aria-pressed="false">Teaching areas (<span data-renamed-count>0</span>)</button>
+			<button class="secondary" type="button" data-renamed-tab="review" aria-pressed="false">Review Renames (<span data-renamed-count>0</span>)</button>
+		</div>
+		<div class="renamed-lists" id="renamed-lists">
+			<section aria-labelledby="renamed-before-title">
+				<h3 id="renamed-before-title">Before only</h3>
+				<ul class="review-list" id="renamed-before-list"></ul>
+			</section>
+			<section aria-labelledby="renamed-after-title">
+				<h3 id="renamed-after-title">After only</h3>
+				<ul class="review-list" id="renamed-after-list"></ul>
+			</section>
+		</div>
+		<ul class="review-list renamed-review-list" id="renamed-review-list" aria-label="Renamed teaching areas" hidden></ul>
+		<footer class="dialog-actions">
+			<button class="secondary" id="close-renamed-areas" type="button">Close</button>
+		</footer>
 	</dialog>
 	<dialog class="workflow-dialog review-dialog" id="unindexed-areas-dialog" aria-labelledby="unindexed-areas-title">
 		<header class="dialog-header">

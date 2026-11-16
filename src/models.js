@@ -48,6 +48,7 @@
 
 		constructor(district, index = 0) {
 			this.parentDistrict = district;
+			this.parentDistrictAfter = district;
 			this.index = index;
 			district.areas.push(this);
 		}
@@ -57,7 +58,11 @@
 		}
 
 		getZone(period) {
-			return this.parentDistrict.getZone(period);
+			return this.getDistrict(period).getZone(period);
+		}
+
+		getDistrict(period) {
+			return period === "after" ? this.parentDistrictAfter : this.parentDistrict;
 		}
 	}
 
@@ -68,11 +73,12 @@
 
 		constructor(zone) {
 			this.zone = zone;
+			this.zoneAfter = zone;
 			zone.districts.push(this);
 		}
 
 		getZone(period) {
-			return period === "before" ? this.zone.nameBefore : this.zone.nameAfter;
+			return period === "before" ? this.zone.nameBefore : this.zoneAfter.nameAfter;
 		}
 	}
 

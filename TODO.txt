@@ -44,4 +44,6 @@ If a missionary is moved into or out of the van by the computer. Their card on t
 
 TODO: housebefore and van before need to have a different css altogether
 
-Renamed district causes transfer without van  (index detetion)
+
+
+Add saving

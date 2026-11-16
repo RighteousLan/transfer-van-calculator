@@ -12,6 +12,10 @@ Imported data is available in `window.transferVanData.missionaries` and `window.
 
 In the missing transfer types review, use **Departing** to mark a missionary's transfer type as ULI.
 
+After both boards are loaded, use **Renamed locations** to review before-only and after-only zones, districts, and teaching areas. Each tab counts its unignored locations across both lists. Select an item and then its counterpart in the other list, or drag an item onto its counterpart. Mark a location as closed or new; those decisions can be undone with **Unignore**. Areas are grouped by route index and can be paired when their indexes match or either area is unindexed. The paired area takes the known index, if any. Use **Review Renames** to undo a paired teaching-area rename. Pairing parent locations also joins unambiguous children with identical names when possible. All remaining locations must be paired or marked closed/new before transfer types are calculated and the later reviews unlock.
+
+Use the refresh button in this review to match unambiguous districts and teaching areas with identical names that moved to another zone or district. Pairing a zone or district also recalculates those child matches automatically. Conflicting known area indexes and ambiguous names remain for manual review. Transfer types and departing missionary selection become available after the unignored renamed-location count reaches zero.
+
 On the stop timeline, use the mouse wheel or drag the background left and right to scroll. Dragging teaching areas and missionaries still moves those items.
 Senior and departing missionaries are excluded from the stop timeline, its validation, and the print timeline.
 Moving a teaching area to another morning stop resets its missionaries' previous manual placements and recalculates their van movements from the new stop.

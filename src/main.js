@@ -70,6 +70,13 @@
 	const defaultsJsonFile = requireElement("defaults-json-file");
 	const missionaryOutput = requireElement("missionary-output");
 	const zoneOutput = requireElement("zone-output");
+	const renamedAreasButton = requireElement("renamed-areas-button");
+	const renamedAreasDialog = requireElement("renamed-areas-dialog");
+	const renamedBeforeList = requireElement("renamed-before-list");
+	const renamedAfterList = requireElement("renamed-after-list");
+	const renamedLists = requireElement("renamed-lists");
+	const renamedReviewList = requireElement("renamed-review-list");
+	const renamedTabs = renamedAreasDialog.querySelectorAll("[data-renamed-tab]");
 	const unindexedAreasButton = requireElement("unindexed-areas-button");
 	const missingTransferTypesButton = requireElement("missing-transfer-types-button");
 	const departingMissionariesButton = requireElement("departing-missionaries-button");
@@ -147,9 +154,16 @@
 	const ignoredUnindexedAreas = new Set();
 	const ignoredTransferTypeMissionaries = new Set();
 	const ignoredMissingApartmentMissionaries = new Set();
+	const ignoredRenamedLocations = new Set();
+	const renamedAreaHistory = new Map();
+	let renamedType = "zone";
+	let selectedRenamedLocation = null;
+	let draggedRenamedLocation = null;
+	let renamedLocationButtons = [];
 	const callNoteOverrides = new WeakMap();
 	let hasBeforeBoard = false;
 	let hasAfterBoard = false;
+	let transferTypesReady = false;
 	let departingSelectionConfirmed = false;
 	let departingSelection = new Map();
 	let activeTripRoute = null;
@@ -443,15 +457,17 @@
 	}
 
 	function serializeArea(area) {
+		const beforeDistrict = area.getDistrict("before");
+		const afterDistrict = area.getDistrict("after");
 		return {
 			nameBefore: area.nameBefore,
 			nameAfter: area.nameAfter,
 			district: {
-				nameBefore: area.district.nameBefore,
-				nameAfter: area.district.nameAfter,
+				nameBefore: beforeDistrict.nameBefore,
+				nameAfter: afterDistrict.nameAfter,
 				zone: {
-					nameBefore: area.district.zone.nameBefore,
-					nameAfter: area.district.zone.nameAfter,
+					nameBefore: area.getZone("before"),
+					nameAfter: area.getZone("after"),
 				},
 			},
 		};
@@ -1319,8 +1335,8 @@
 	function comparisonAreaText(selection) {
 		const details = selection.existing.map((area) => [
 			`Area: ${displayChangedName(area.nameBefore, area.nameAfter)}`,
-			`District: ${displayChangedName(area.district.nameBefore, area.district.nameAfter)}`,
-			`Zone: ${displayChangedName(area.district.zone.nameBefore, area.district.zone.nameAfter)}`,
+			`District: ${displayChangedName(area.getDistrict("before").nameBefore, area.getDistrict("after").nameAfter)}`,
+			`Zone: ${displayChangedName(area.getZone("before"), area.getZone("after"))}`,
 		].join("\n"));
 		const existingKeys = new Set(selection.existing.flatMap((area) =>
 			[normalize(area.nameBefore), normalize(area.nameAfter)]));
@@ -2211,6 +2227,20 @@
 	window.addEventListener("resize", () => {
 		if (!routesView.hidden) fitOverviewMap();
 	});
+	renamedAreasButton.addEventListener("click", () => {
+		selectedRenamedLocation = null;
+		renderRenamedLocations();
+		renamedAreasDialog.showModal();
+	});
+	requireElement("recalculate-renamed-areas").addEventListener("click", recalculateRenamedLocations);
+	for (const tab of renamedTabs) {
+		tab.addEventListener("click", () => {
+			renamedType = tab.dataset.renamedTab;
+			selectedRenamedLocation = null;
+			renderRenamedLocations();
+		});
+	}
+	requireElement("close-renamed-areas").addEventListener("click", () => renamedAreasDialog.close());
 	unindexedAreasButton.addEventListener("click", () => {
 		renderUnindexedAreas();
 		unindexedAreasDialog.showModal();
@@ -2218,6 +2248,7 @@
 	reindexUnindexedAreasButton.addEventListener("click", reindexUnindexedAreas);
 	requireElement("close-unindexed-areas").addEventListener("click", () => unindexedAreasDialog.close());
 	missingTransferTypesButton.addEventListener("click", () => {
+		if (!hasTransferTypeInputsReady()) return;
 		renderMissingTransferTypes();
 		missingTransferTypesDialog.showModal();
 	});
@@ -2234,6 +2265,7 @@
 	requireElement("cancel-departing-missionaries").addEventListener("click", () => departingMissionariesDialog.close());
 	departingMissionariesForm.addEventListener("submit", (event) => {
 		event.preventDefault();
+		if (!hasTransferTypeInputsReady()) return;
 		for (const missionary of missionaries) {
 			if (missionary.transferType === TransferType.ULI) missionary.transferType = calculateTransferType(missionary);
 		}
@@ -2259,7 +2291,7 @@
 		if (!area) return "Not assigned";
 		return [
 			`Area: ${displayName(area.nameBefore, area.nameAfter, period) || "Not named"}`,
-			`District: ${displayName(area.district.nameBefore, area.district.nameAfter, period) || "Not named"}`,
+			`District: ${displayName(area.getDistrict(period).nameBefore, area.getDistrict(period).nameAfter, period) || "Not named"}`,
 			`Zone: ${area.getZone(period) || "Not named"}`,
 		].join("\n");
 	}
@@ -2380,12 +2412,12 @@
 	}
 
 	function renderImportedData() {
+		updateWorkflowButtons();
 		renderMissionaries();
 		renderZones();
 		missionaryCount.textContent = String(missionaries.length);
 		zoneCount.textContent = String(zones.length);
 		dataSummary.textContent = `${missionaries.length} ${missionaries.length === 1 ? "missionary" : "missionaries"} · ${zones.length} ${zones.length === 1 ? "zone" : "zones"}`;
-		updateWorkflowButtons();
 	}
 
 	function callTransferMessage(transferType) {
@@ -2507,13 +2539,18 @@
 
 		const body = document.createElement("tbody");
 		const trainerNames = trainerNameKeys();
-		for (const district of zone.districts.filter((entry) => entry.nameBefore)) {
-			const beforeAreas = district.areas.filter((area) => area.nameBefore);
-			const areaRows = beforeAreas.flatMap((area) => {
-				const assigned = missionaries.filter((missionary) => missionary.areaBefore === area);
-				return assigned.length ? assigned.map((missionary) => ({ area, missionary })) : [{ area, missionary: null }];
-			});
-			const rows = areaRows.length ? areaRows : [{ area: null, missionary: null }];
+		const districtsWithMissionaries = zone.districts
+			.filter((district) => district.nameBefore && district.zone === zone)
+			.map((district) => ({
+				district,
+				rows: district.areas
+					.filter((area) => area.nameBefore && area.district === district)
+					.flatMap((area) => missionaries
+						.filter((missionary) => missionary.type !== MissionaryType.Senior && missionary.areaBefore === area)
+						.map((missionary) => ({ area, missionary }))),
+			}))
+			.filter(({ rows }) => rows.length > 0);
+		for (const { district, rows } of districtsWithMissionaries) {
 			rows.forEach(({ area, missionary }, index) => {
 				const row = document.createElement("tr");
 				if (index === 0) {
@@ -2523,13 +2560,11 @@
 					districtCell.textContent = district.nameBefore || "Unnamed district";
 					row.append(districtCell);
 				}
-				if (!area || index === 0 || rows[index - 1].area !== area) {
+				if (index === 0 || rows[index - 1].area !== area) {
 					const areaCell = document.createElement("th");
 					areaCell.scope = "rowgroup";
-					areaCell.rowSpan = area
-						? Math.max(1, areaRows.filter((entry) => entry.area === area).length)
-						: 1;
-					areaCell.textContent = area?.nameBefore || "—";
+					areaCell.rowSpan = rows.filter((entry) => entry.area === area).length;
+					areaCell.textContent = area.nameBefore;
 					row.append(areaCell);
 				}
 				const nameCell = document.createElement("td");
@@ -2608,11 +2643,11 @@
 				body.append(row);
 			});
 		}
-		if (zone.districts.length === 0) {
+		if (districtsWithMissionaries.length === 0) {
 			const row = document.createElement("tr");
 			const cell = document.createElement("td");
 			cell.colSpan = headers.length;
-			cell.textContent = "No districts in this zone.";
+			cell.textContent = "No non-senior missionaries in this zone.";
 			row.append(cell);
 			body.append(row);
 		}
@@ -2653,6 +2688,24 @@
 	}
 
 	function updateWorkflowButtons() {
+		const boardsReady = hasBeforeBoard && hasAfterBoard;
+		const renamedCount = boardsReady ? ["zone", "district", "area"].reduce((count, type) =>
+			count + getUnignoredLocationCount(type), 0) : 0;
+		const canCalculateTransferTypes = boardsReady && renamedCount === 0;
+		if (!canCalculateTransferTypes) {
+			for (const missionary of missionaries) missionary.transferType = null;
+			transferTypesReady = false;
+			departingSelectionConfirmed = false;
+		} else if (!transferTypesReady) {
+			for (const missionary of missionaries) missionary.transferType = calculateTransferType(missionary);
+			transferTypesReady = true;
+		}
+		setWorkflowButton(
+			renamedAreasButton,
+			boardsReady ? `Renamed locations (${renamedCount})` : "Renamed locations",
+			boardsReady ? (renamedCount > 0 ? "warning" : "complete") : "none",
+			!boardsReady,
+		);
 		const unindexedCount = [...unindexedAreas].filter((area) => !ignoredUnindexedAreas.has(area)).length;
 		setWorkflowButton(
 			unindexedAreasButton,
@@ -2661,20 +2714,21 @@
 			!hasBeforeBoard /*|| unindexedCount === 0*/,
 		);
 
-		const boardsReady = hasBeforeBoard && hasAfterBoard;
 		const missingTransferTypes = missionaries.filter((missionary) =>
 			missionary.type !== MissionaryType.Senior
 			&& missionary.transferType == null
 			&& !ignoredTransferTypeMissionaries.has(missionary)).length;
 		setWorkflowButton(
 			missingTransferTypesButton,
-			boardsReady ? `Missionaries without transfer type (${missingTransferTypes})` : "Missionaries without transfer type",
-			boardsReady ? (missingTransferTypes > 0 ? "warning" : "complete") : "none",
-			!boardsReady,
+			canCalculateTransferTypes ? `Missionaries without transfer type (${missingTransferTypes})` : "Missionaries without transfer type",
+			canCalculateTransferTypes ? (missingTransferTypes > 0 ? "warning" : "complete") : "none",
+			!canCalculateTransferTypes,
 		);
+		recalculateMissingTransferTypesButton.disabled = !canCalculateTransferTypes;
 
 		const missingApartments = missionaries.filter((missionary) =>
-			missionary.areaBefore
+			missionary.type !== MissionaryType.Senior
+			&& missionary.areaBefore
 			&& !missionary.currentLoc
 			&& !ignoredMissingApartmentMissionaries.has(missionary)).length;
 		setWorkflowButton(
@@ -2684,24 +2738,28 @@
 			!hasBeforeBoard,
 		);
 
-		const departingCount = missionaries.filter((missionary) => missionary.transferType === TransferType.ULI).length;
+		const departingCount = transferTypesReady
+			? missionaries.filter((missionary) => missionary.transferType === TransferType.ULI).length
+			: 0;
 		setWorkflowButton(
 			departingMissionariesButton,
 			departingSelectionConfirmed ? `${departingCount} departing missionaries` : "Select departing missionaries",
-			!hasAfterBoard ? "none" : (departingSelectionConfirmed ? "complete" : "warning"),
-			!hasAfterBoard,
+			!canCalculateTransferTypes ? "none" : (departingSelectionConfirmed ? "complete" : "warning"),
+			!canCalculateTransferTypes,
 		);
 
 		const canContinue = hasBeforeBoard
 			&& unindexedCount === 0
 			&& boardsReady
+			&& renamedCount === 0
 			&& missingTransferTypes === 0
 			&& missingApartments === 0
 			&& departingSelectionConfirmed;
 		gatedViewButtons.forEach((button) => { button.disabled = !canContinue; });
 
 		const tripIssueCount = Number(hasBeforeBoard && unindexedCount > 0)
-			+ Number(boardsReady && missingTransferTypes > 0)
+			+ Number(boardsReady && renamedCount > 0)
+			+ Number(canCalculateTransferTypes && missingTransferTypes > 0)
 			+ Number(hasBeforeBoard && missingApartments > 0)
 			+ Number(hasAfterBoard && !departingSelectionConfirmed);
 		const tripStatus = tripIssueCount > 0
@@ -2726,6 +2784,355 @@
 		item.className = "review-empty";
 		item.textContent = message;
 		list.append(item);
+	}
+
+	function getLocations(type) {
+		if (type === "zone") return zones;
+		const districts = [...new Set(zones.flatMap((zone) => zone.districts))];
+		if (type === "district") return districts;
+		return [...new Set(districts.flatMap((district) => district.areas))];
+	}
+
+	function getUnmatchedLocations(type) {
+		return getLocations(type).filter((location) => Boolean(location.nameBefore) !== Boolean(location.nameAfter));
+	}
+
+	function getUnignoredLocationCount(type) {
+		return getUnmatchedLocations(type).filter((location) => !ignoredRenamedLocations.has(location)).length;
+	}
+
+	function hasTransferTypeInputsReady() {
+		return hasBeforeBoard && hasAfterBoard && transferTypesReady
+			&& ["zone", "district", "area"].every((type) => getUnignoredLocationCount(type) === 0);
+	}
+
+	function locationDescription(location, type, period) {
+		const name = period === "before" ? location.nameBefore : location.nameAfter;
+		if (type === "zone") return name;
+		const zone = location.getZone(period);
+		if (type === "district") return `${name} · ${zone || "Not named"}`;
+		const district = location.getDistrict(period);
+		const districtName = period === "before" ? district.nameBefore : district.nameAfter;
+		return `${name} · ${districtName || "Not named"} · ${zone || "Not named"}`;
+	}
+
+	function renderRenamedLocations() {
+		const renamedAreas = getLocations("area").filter((area) => area.nameBefore && area.nameAfter
+			&& area.nameBefore !== area.nameAfter && renamedAreaHistory.has(area));
+		for (const tab of renamedTabs) {
+			tab.setAttribute("aria-pressed", String(tab.dataset.renamedTab === renamedType));
+			tab.querySelector("[data-renamed-count]").textContent = String(tab.dataset.renamedTab === "review"
+				? renamedAreas.length : getUnignoredLocationCount(tab.dataset.renamedTab));
+		}
+		renamedLists.hidden = renamedType === "review";
+		renamedReviewList.hidden = renamedType !== "review";
+		renamedLocationButtons = [];
+		if (renamedType === "review") {
+			renamedReviewList.replaceChildren();
+			if (!renamedAreas.length) appendReviewMessage(renamedReviewList, "No renamed teaching areas.");
+			for (const area of renamedAreas.sort((first, second) => first.nameBefore.localeCompare(second.nameBefore))) {
+				const item = document.createElement("li");
+				item.className = "review-item";
+				const label = document.createElement("span");
+				label.className = "review-item-text";
+				label.textContent = `${locationDescription(area, "area", "before")} → ${locationDescription(area, "area", "after")}`;
+				const undo = document.createElement("button");
+				undo.type = "button";
+				undo.className = "secondary review-ignore-button";
+				undo.textContent = "Undo rename";
+				undo.setAttribute("aria-label", `Undo rename: ${label.textContent}`);
+				undo.addEventListener("click", () => {
+					undoAreaRename(area);
+					renderImportedData();
+					renderRenamedLocations();
+				});
+				item.append(label, undo);
+				renamedReviewList.append(item);
+			}
+			return;
+		}
+		const locations = getUnmatchedLocations(renamedType);
+		for (const [period, list] of [["before", renamedBeforeList], ["after", renamedAfterList]]) {
+			list.replaceChildren();
+			const entries = locations.filter((location) => period === "before" ? location.nameBefore : location.nameAfter)
+				.sort((first, second) => {
+					if (renamedType === "area" && first.index !== second.index) {
+						if (first.index === null) return 1;
+						if (second.index === null) return -1;
+						return first.index - second.index;
+					}
+					return locationDescription(first, renamedType, period).localeCompare(locationDescription(second, renamedType, period));
+				});
+			if (!entries.length) {
+				appendReviewMessage(list, `No ${period}-only ${renamedType === "area" ? "teaching areas" : `${renamedType}s`}.`);
+				continue;
+			}
+			let lastIndex;
+			for (const location of entries) {
+				if (renamedType === "area" && location.index !== lastIndex) {
+					const heading = document.createElement("li");
+					heading.className = "review-index-heading";
+					heading.textContent = `Index: ${location.index === null ? "Not indexed" : location.index}`;
+					list.append(heading);
+					lastIndex = location.index;
+				}
+				const ignored = ignoredRenamedLocations.has(location);
+				const item = document.createElement("li");
+				item.className = "review-item";
+				item.classList.toggle("is-ignored", ignored);
+				const choice = document.createElement("button");
+				choice.type = "button";
+				choice.className = "renamed-location-button";
+				choice.draggable = true;
+				choice.textContent = locationDescription(location, renamedType, period);
+				const selection = { location, period };
+				renamedLocationButtons.push({ ...selection, button: choice });
+				choice.addEventListener("click", () => selectRenamedLocation(selection));
+				choice.addEventListener("dragstart", (event) => {
+					draggedRenamedLocation = selection;
+					selectedRenamedLocation = selection;
+					if (event.dataTransfer) {
+						event.dataTransfer.effectAllowed = "move";
+						event.dataTransfer.setData("text/plain", choice.textContent);
+					}
+					updateRenamedLocationButtons();
+				});
+				choice.addEventListener("dragover", (event) => {
+					if (!draggedRenamedLocation || !canPairRenamedLocations(draggedRenamedLocation, selection)) return;
+					event.preventDefault();
+					choice.classList.add("is-drop-target");
+					if (event.dataTransfer) event.dataTransfer.dropEffect = "move";
+				});
+				choice.addEventListener("dragleave", (event) => {
+					if (!choice.contains(event.relatedTarget)) choice.classList.remove("is-drop-target");
+				});
+				choice.addEventListener("drop", (event) => {
+					if (!draggedRenamedLocation || !canPairRenamedLocations(draggedRenamedLocation, selection)) return;
+					event.preventDefault();
+					choice.classList.remove("is-drop-target");
+					pairRenamedLocations(draggedRenamedLocation, selection);
+					draggedRenamedLocation = null;
+				});
+				choice.addEventListener("dragend", () => {
+					draggedRenamedLocation = null;
+					for (const entry of renamedLocationButtons) entry.button.classList.remove("is-drop-target");
+				});
+				const ignore = document.createElement("button");
+				ignore.type = "button";
+				ignore.className = "secondary review-ignore-button";
+				ignore.textContent = ignored ? "Unignore" : `${period === "before" ? "Closed" : "New"} ${renamedType}`;
+				ignore.setAttribute("aria-label", `${ignore.textContent}: ${choice.textContent}`);
+				ignore.addEventListener("click", () => {
+					if (ignored) ignoredRenamedLocations.delete(location);
+					else ignoredRenamedLocations.add(location);
+					renderRenamedLocations();
+					renderImportedData();
+				});
+				item.append(choice, ignore);
+				list.append(item);
+			}
+		}
+		updateRenamedLocationButtons();
+	}
+
+	function canPairRenamedLocations(first, second) {
+		return first.period !== second.period
+			&& (renamedType !== "area" || compatibleAreaIndexes(first.location, second.location));
+	}
+
+	function compatibleAreaIndexes(first, second) {
+		return first.index === null || second.index === null || first.index === second.index;
+	}
+
+	function updateRenamedLocationButtons() {
+		for (const entry of renamedLocationButtons) {
+			const selected = selectedRenamedLocation?.location === entry.location;
+			entry.button.setAttribute("aria-pressed", String(selected));
+			entry.button.disabled = Boolean(selectedRenamedLocation && !selected
+				&& !canPairRenamedLocations(selectedRenamedLocation, entry));
+		}
+	}
+
+	function selectRenamedLocation(selection) {
+		if (!selectedRenamedLocation) selectedRenamedLocation = selection;
+		else if (selectedRenamedLocation.location === selection.location) selectedRenamedLocation = null;
+		else if (canPairRenamedLocations(selectedRenamedLocation, selection)) {
+			pairRenamedLocations(selectedRenamedLocation, selection);
+			return;
+		}
+		updateRenamedLocationButtons();
+	}
+
+	function pairRenamedLocations(first, second) {
+		const before = first.period === "before" ? first.location : second.location;
+		const after = first.period === "after" ? first.location : second.location;
+		mergeLocations(renamedType, before, after);
+		if (renamedType === "zone" || renamedType === "district") recalculateRenamedLocationMatches();
+		selectedRenamedLocation = null;
+		renderImportedData();
+		renderRenamedLocations();
+	}
+
+	function replaceInList(list, oldItem, newItem) {
+		const index = list.indexOf(oldItem);
+		if (index === -1) return;
+		if (list.includes(newItem)) list.splice(index, 1);
+		else list[index] = newItem;
+	}
+
+	function mergeLocations(type, before, after) {
+		if (type === "area" && before.nameBefore !== after.nameAfter) {
+			const apartmentMemberships = apartments
+				.filter((apartment) => apartment.teachingAreas.includes(after))
+				.map((apartment) => ({ apartment, hadBefore: apartment.teachingAreas.includes(before) }));
+			const planEntries = [];
+			for (const route of routes) {
+				const plan = tripPlansByRoute.get(route);
+				if (!plan) continue;
+				for (const entries of plan.areaEntries.values()) {
+					for (const entry of entries) if (entry.area === after) planEntries.push(entry);
+				}
+			}
+			renamedAreaHistory.set(before, {
+				after, apartmentMemberships, planEntries,
+				beforeIndex: before.index, afterIndex: after.index,
+				beforeIndexIgnored: ignoredUnindexedAreas.has(before),
+				afterIndexIgnored: ignoredUnindexedAreas.has(after),
+			});
+		}
+		before.nameAfter = after.nameAfter;
+		ignoredRenamedLocations.delete(before);
+		ignoredRenamedLocations.delete(after);
+		if (type === "zone") {
+			for (const district of getLocations("district")) {
+				if (district.zone === after) district.zone = before;
+				if (district.zoneAfter === after) district.zoneAfter = before;
+			}
+			for (const district of after.districts) {
+				if (!before.districts.includes(district)) before.districts.push(district);
+			}
+			zones.splice(zones.indexOf(after), 1);
+			mergeIdenticalChildren("district", before.districts);
+		} else if (type === "district") {
+			before.zoneAfter = after.zoneAfter;
+			for (const area of getLocations("area")) {
+				if (area.parentDistrict === after) area.parentDistrict = before;
+				if (area.parentDistrictAfter === after) area.parentDistrictAfter = before;
+			}
+			for (const area of after.areas) {
+				if (!before.areas.includes(area)) before.areas.push(area);
+			}
+			for (const zone of zones) replaceInList(zone.districts, after, before);
+			mergeIdenticalChildren("area", before.areas);
+		} else {
+			before.index = before.index ?? after.index;
+			if (before.index !== null) {
+				unindexedAreas.delete(before);
+				ignoredUnindexedAreas.delete(before);
+			}
+			before.parentDistrictAfter = after.parentDistrictAfter;
+			for (const district of getLocations("district")) replaceInList(district.areas, after, before);
+			let changedApartment = false;
+			for (const apartment of apartments) {
+				if (apartment.teachingAreas.includes(before) || apartment.teachingAreas.includes(after)) changedApartment = true;
+				replaceInList(apartment.teachingAreas, after, before);
+			}
+			if (changedApartment) setDefaultChangesDirty(true);
+			unindexedAreas.delete(after);
+			ignoredUnindexedAreas.delete(after);
+			for (const missionary of missionaries) {
+				if (missionary.areaAfter === after) missionary.areaAfter = before;
+				if ((missionary.areaBefore === before || missionary.areaAfter === before)
+					&& transferTypesReady && missionary.transferType !== TransferType.ULI) {
+					missionary.transferType = calculateTransferType(missionary);
+				}
+			}
+			for (const route of routes) {
+				const plan = tripPlansByRoute.get(route);
+				if (!plan) continue;
+				for (const entries of plan.areaEntries.values()) {
+					for (const entry of entries) if (entry.area === after) entry.area = before;
+				}
+			}
+		}
+	}
+
+	function undoAreaRename(before) {
+		const history = renamedAreaHistory.get(before);
+		if (!history) throw new Error("Cannot undo a rename without its original teaching area.");
+		const { after, apartmentMemberships, planEntries, beforeIndex, afterIndex,
+			beforeIndexIgnored, afterIndexIgnored } = history;
+		const afterDistrict = before.getDistrict("after");
+		after.parentDistrict = afterDistrict;
+		after.parentDistrictAfter = afterDistrict;
+		after.nameAfter = before.nameAfter;
+		after.index = beforeIndex === afterIndex ? before.index : afterIndex;
+		if (beforeIndex !== afterIndex) before.index = beforeIndex;
+		if (afterDistrict !== before.district) {
+			const index = afterDistrict.areas.indexOf(before);
+			if (index !== -1) afterDistrict.areas.splice(index, 1);
+		}
+		if (!afterDistrict.areas.includes(after)) afterDistrict.areas.push(after);
+		before.nameAfter = "";
+		before.parentDistrictAfter = before.parentDistrict;
+		if (before.index === null) {
+			unindexedAreas.add(before);
+			if (beforeIndexIgnored) ignoredUnindexedAreas.add(before);
+		}
+		if (after.index === null) {
+			unindexedAreas.add(after);
+			if (afterIndexIgnored) ignoredUnindexedAreas.add(after);
+		}
+		for (const missionary of missionaries) {
+			if (missionary.areaAfter === before) missionary.areaAfter = after;
+		}
+		let changedApartment = false;
+		for (const { apartment, hadBefore } of apartmentMemberships) {
+			if (!apartments.includes(apartment) || !apartment.teachingAreas.includes(before)) continue;
+			if (hadBefore) {
+				if (!apartment.teachingAreas.includes(after)) apartment.teachingAreas.push(after);
+			} else {
+				replaceInList(apartment.teachingAreas, before, after);
+			}
+			changedApartment = true;
+		}
+		if (changedApartment) setDefaultChangesDirty(true);
+		for (const entry of planEntries) if (entry.area === before) entry.area = after;
+		for (const route of routes) {
+			const plan = tripPlansByRoute.get(route);
+			if (!plan) continue;
+			for (const entries of plan.areaEntries.values()) {
+				for (const entry of entries) {
+					const membership = apartmentMemberships.find(({ apartment }) => apartment === entry.originalApartment);
+					if (entry.area === before && membership && !membership.hadBefore) entry.area = after;
+				}
+			}
+		}
+		renamedAreaHistory.delete(before);
+	}
+
+	function mergeIdenticalChildren(type, children) {
+		const beforeOnly = children.filter((child) => child.nameBefore && !child.nameAfter);
+		for (const before of beforeOnly) {
+			const matches = children.filter((child) => !child.nameBefore && child.nameAfter === before.nameBefore
+				&& (type !== "area" || compatibleAreaIndexes(child, before)));
+			const matchingBefore = matches.length === 1 ? beforeOnly.filter((child) =>
+				child.nameBefore === before.nameBefore && !child.nameAfter
+				&& (type !== "area" || compatibleAreaIndexes(child, matches[0]))) : [];
+			if (matches.length === 1 && matchingBefore.length === 1) mergeLocations(type, before, matches[0]);
+		}
+	}
+
+	function recalculateRenamedLocations() {
+		recalculateRenamedLocationMatches();
+		selectedRenamedLocation = null;
+		renderRenamedLocations();
+		renderImportedData();
+	}
+
+	function recalculateRenamedLocationMatches() {
+		mergeIdenticalChildren("district", getUnmatchedLocations("district"));
+		mergeIdenticalChildren("area", getUnmatchedLocations("area"));
 	}
 
 	function appendReviewItem(list, text, isIgnored, onIgnore, onDeparting = null) {
@@ -2767,7 +3174,7 @@
 			const isIgnored = ignoredUnindexedAreas.has(area);
 			appendReviewItem(
 				unindexedAreasList,
-				`${areaName} · ${districtName} District · ${zoneName} Zone`,
+				`${areaName} · ${districtName} · ${zoneName}`,
 				isIgnored,
 				() => {
 					if (isIgnored) ignoredUnindexedAreas.delete(area);
@@ -2821,7 +3228,10 @@
 	function renderMissingApartments() {
 		missingApartmentsList.replaceChildren();
 		const missing = missionaries
-			.filter((missionary) => missionary.areaBefore && !missionary.currentLoc)
+			.filter((missionary) =>
+				missionary.type !== MissionaryType.Senior
+				&& missionary.areaBefore
+				&& !missionary.currentLoc)
 			.sort((first, second) => first.lastName.localeCompare(second.lastName) || first.firstName.localeCompare(second.firstName));
 		if (missing.length === 0) {
 			appendReviewMessage(missingApartmentsList, "Every missionary has an apartment.");
@@ -2859,6 +3269,7 @@
 	}
 
 	function recalculateMissingTransferTypes() {
+		if (!hasTransferTypeInputsReady()) return;
 		for (const missionary of missionaries) {
 			if (missionary.transferType != null) continue;
 			missionary.transferType = calculateTransferType(missionary);
@@ -2913,7 +3324,7 @@
 	}
 
 	function openDepartingMissionariesDialog() {
-		if (!hasAfterBoard) return;
+		if (!hasTransferTypeInputsReady()) return;
 		departingSelection = new Map(missionaries.map((missionary) => [
 			missionary,
 			missionary.transferType === TransferType.ULI,
@@ -3910,6 +4321,10 @@
 	}
 
 	function applyAssignments(assignments, period) {
+		transferTypesReady = false;
+		renamedAreaHistory.clear();
+		draggedRenamedLocation = null;
+		selectedRenamedLocation = null;
 		if (period === "before") {
 			missionaries.splice(0, missionaries.length);
 			zones.splice(0, zones.length);
@@ -3917,6 +4332,43 @@
 			ignoredUnindexedAreas.clear();
 			ignoredTransferTypeMissionaries.clear();
 			ignoredMissingApartmentMissionaries.clear();
+			ignoredRenamedLocations.clear();
+			tripPlansByRoute = new WeakMap();
+		} else if (hasAfterBoard) {
+			for (const area of getLocations("area")) {
+				if (!area.nameBefore) {
+					unindexedAreas.delete(area);
+					ignoredUnindexedAreas.delete(area);
+				} else {
+					area.nameAfter = "";
+					area.parentDistrictAfter = area.parentDistrict;
+				}
+			}
+			for (const district of getLocations("district")) {
+				if (!district.nameBefore) continue;
+				district.nameAfter = "";
+				district.zoneAfter = district.zone;
+				district.areas = district.areas.filter((area) => area.nameBefore && area.district === district);
+			}
+			for (const zone of zones) {
+				zone.nameAfter = "";
+				zone.districts = zone.districts.filter((district) => district.nameBefore && district.zone === zone);
+			}
+			for (let index = zones.length - 1; index >= 0; index -= 1) {
+				if (!zones[index].nameBefore) zones.splice(index, 1);
+			}
+			for (let index = missionaries.length - 1; index >= 0; index -= 1) {
+				const missionary = missionaries[index];
+				if (!missionary.areaBefore) missionaries.splice(index, 1);
+				else {
+					missionary.areaAfter = null;
+					missionary.transferType = null;
+					missionary.positionAfter = "";
+					missionary.compAfter = "";
+				}
+			}
+			ignoredRenamedLocations.clear();
+			tripPlansByRoute = new WeakMap();
 		}
 
 		const matchedThisUpload = new Set();
@@ -3985,9 +4437,6 @@
 		try {
 			const assignments = await readAssignments(file, period);
 			const result = applyAssignments(assignments, period);
-			missionaries.forEach((missionary) => { //CALCULATE TRANSFER TYPES FOR ALL MISSIONARIES
-				missionary.transferType = calculateTransferType(missionary);
-			});
 			if (period === "before") {
 				hasBeforeBoard = true;
 				hasAfterBoard = false;
