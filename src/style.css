@@ -301,6 +301,48 @@ button svg, .upload-button svg { width: 17px; height: 17px; }
 	border-top: 1px solid var(--line);
 }
 
+.save-manager {
+	max-width: 860px;
+	padding: 24px;
+	border: 1px solid var(--line);
+	border-radius: 6px;
+	background: var(--surface);
+}
+
+.save-manager-heading, .save-row, .save-file-actions, .save-manager-actions {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+}
+
+.save-manager-heading h1 { font-size: 32px; }
+.save-manager-heading p, .save-manager-status { color: var(--muted); font-size: 14px; }
+.save-manager-actions { justify-content: flex-end; gap: 8px; }
+.save-list { list-style: none; padding: 0; margin: 20px 0; }
+.save-row { padding: 12px 0; border-top: 1px solid var(--line); }
+.save-row-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.save-row button { min-height: 40px; }
+.save-file-actions { justify-content: flex-start; }
+.save-file-actions > #export-saves,
+.save-file-actions > label[for="import-saves"] {
+	width: 160px;
+	min-height: 44px;
+	padding: 0 12px;
+	font-size: 14px;
+}
+.save-manager-status.error { color: #a33131; }
+
+.new-save-options {
+	display: grid;
+	gap: 12px;
+	padding: 0;
+	border: 0;
+}
+.new-save-options legend { margin-bottom: 12px; font-weight: 650; }
+.new-save-options label { display: flex; align-items: baseline; gap: 8px; }
+
 .data-heading {
 	display: flex;
 	flex-wrap: wrap;

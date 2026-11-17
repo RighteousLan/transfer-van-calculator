@@ -9,6 +9,7 @@
 		TripTime,
 		TransferType,
 		Route,
+		Stop,
 		Zone,
 	} = window.TransferVanModels;
 	const missionaries = [];
@@ -158,17 +159,17 @@
 	let pendingBatchApartments = [];
 	let matchedBatchApartmentCount = 0;
 	let batchComparison = null;
-	const unindexedAreas = new Set();
-	const ignoredUnindexedAreas = new Set();
-	const ignoredTransferTypeMissionaries = new Set();
-	const ignoredMissingApartmentMissionaries = new Set();
-	const ignoredRenamedLocations = new Set();
-	const renamedAreaHistory = new Map();
+	let unindexedAreas = new Set();
+	let ignoredUnindexedAreas = new Set();
+	let ignoredTransferTypeMissionaries = new Set();
+	let ignoredMissingApartmentMissionaries = new Set();
+	let ignoredRenamedLocations = new Set();
+	let renamedAreaHistory = new Map();
 	let renamedType = "zone";
 	let selectedRenamedLocation = null;
 	let draggedRenamedLocation = null;
 	let renamedLocationButtons = [];
-	const callNoteOverrides = new WeakMap();
+	let callNoteOverrides = new WeakMap();
 	let hasBeforeBoard = false;
 	let hasAfterBoard = false;
 	let transferTypesReady = false;
@@ -176,7 +177,7 @@
 	let departingSelection = new Map();
 	let activeTripRoute = null;
 	let tripPlansByRoute = new WeakMap();
-	const sharedAfternoonFirstStopHouseBefore = new Set();
+	let sharedAfternoonFirstStopHouseBefore = new Set();
 	let tripDrag = null;
 	let tripAreaDrag = null;
 	let editingRouteDraft = null;
@@ -526,7 +527,7 @@
 					primaryApartmentIndex: apartments.indexOf(stop.primaryApartment),
 					secondaryApartmentIndexes: stop.secondaryApartments.map((apartment) => apartments.indexOf(apartment)),
 				})),
-				travelTimes: route.travelTimeTable.map((row) => [...row]),
+				// travelTimes: route.travelTimeTable.map((row) => [...row]), // Enable when travel times are used again.
 			})),
 		};
 	}
@@ -2331,7 +2332,7 @@
 		departingMissionariesDialog.close();
 		renderImportedData();
 	});
-	defaultsInitialization = initializeDefaultData();
+	defaultsInitialization = initializeDefaultData().then(initializeSaveManager);
 
 	function displayName(before, after, period) {
 		return period === "before" ? before : after;
@@ -2872,36 +2873,45 @@
 	}
 
 	function renderRenamedLocations() {
-		const renamedAreas = getLocations("area").filter((area) => area.nameBefore && area.nameAfter
-			&& area.nameBefore !== area.nameAfter && renamedAreaHistory.has(area));
+		const renamedLocations = ["zone", "district", "area"].flatMap((type) =>
+			getLocations(type)
+				.filter((location) => location.nameBefore && location.nameAfter
+					&& location.nameBefore !== location.nameAfter
+					&& (type !== "area" || renamedAreaHistory.has(location)))
+				.sort((first, second) => first.nameBefore.localeCompare(second.nameBefore))
+				.map((location) => ({ type, location })));
 		for (const tab of renamedTabs) {
 			tab.setAttribute("aria-pressed", String(tab.dataset.renamedTab === renamedType));
 			tab.querySelector("[data-renamed-count]").textContent = String(tab.dataset.renamedTab === "review"
-				? renamedAreas.length : getUnignoredLocationCount(tab.dataset.renamedTab));
+				? renamedLocations.length : getUnignoredLocationCount(tab.dataset.renamedTab));
 		}
 		renamedLists.hidden = renamedType === "review";
 		renamedReviewList.hidden = renamedType !== "review";
 		renamedLocationButtons = [];
 		if (renamedType === "review") {
 			renamedReviewList.replaceChildren();
-			if (!renamedAreas.length) appendReviewMessage(renamedReviewList, "No renamed teaching areas.");
-			for (const area of renamedAreas.sort((first, second) => first.nameBefore.localeCompare(second.nameBefore))) {
+			if (!renamedLocations.length) appendReviewMessage(renamedReviewList, "No renamed locations.");
+			for (const { type, location } of renamedLocations) {
 				const item = document.createElement("li");
 				item.className = "review-item";
 				const label = document.createElement("span");
 				label.className = "review-item-text";
-				label.textContent = `${locationDescription(area, "area", "before")} → ${locationDescription(area, "area", "after")}`;
-				const undo = document.createElement("button");
-				undo.type = "button";
-				undo.className = "secondary review-ignore-button";
-				undo.textContent = "Undo rename";
-				undo.setAttribute("aria-label", `Undo rename: ${label.textContent}`);
-				undo.addEventListener("click", () => {
-					undoAreaRename(area);
-					renderImportedData();
-					renderRenamedLocations();
-				});
-				item.append(label, undo);
+				const typeLabel = { zone: "Zone", district: "District", area: "Teaching area" }[type];
+				label.textContent = `${typeLabel}: ${locationDescription(location, type, "before")} → ${locationDescription(location, type, "after")}`;
+				item.append(label);
+				if (type === "area") {
+					const undo = document.createElement("button");
+					undo.type = "button";
+					undo.className = "secondary review-ignore-button";
+					undo.textContent = "Undo rename";
+					undo.setAttribute("aria-label", `Undo rename: ${label.textContent}`);
+					undo.addEventListener("click", () => {
+						undoAreaRename(location);
+						renderImportedData();
+						renderRenamedLocations();
+					});
+					item.append(undo);
+				}
 				renamedReviewList.append(item);
 			}
 			return;
@@ -4625,6 +4635,434 @@
 			if (file) handleFile(file);
 		});
 	}
+
+	const SAVES_STORAGE_KEY = "transfer-van-saves-v1";
+	const saveList = requireElement("save-list");
+	const saveStatus = requireElement("save-manager-status");
+	const saveFileInput = requireElement("import-saves");
+	const newSaveDialog = requireElement("new-save-dialog");
+	const newSaveForm = requireElement("new-save-form");
+	const newSaveName = requireElement("new-save-name");
+	const newSaveStatus = requireElement("new-save-status");
+	const saveClasses = { Apartment, Area, District, Missionary, Route, Stop, Zone };
+	let saves = [];
+	let currentSaveId = null;
+	let saveManagerReady = false;
+	let creatingSave = false;
+
+	// Store a graph rather than a tree: reviews and trip plans share model objects and contain cycles.
+	function encodeSaveGraph(root) {
+		const ids = new Map();
+		const nodes = [];
+		function encode(value) {
+			if (value === null || typeof value !== "object") return value;
+			if (ids.has(value)) return { ref: ids.get(value) };
+			const id = nodes.length;
+			ids.set(value, id);
+			nodes.push(null);
+			let type;
+			let data;
+			if (Array.isArray(value)) {
+				type = "Array";
+				data = value.map(encode);
+			} else if (value instanceof Set) {
+				type = "Set";
+				data = [...value].map(encode);
+			} else if (value instanceof Map) {
+				type = "Map";
+				data = [...value].map(([key, item]) => [encode(key), encode(item)]);
+			} else {
+				type = Object.keys(saveClasses).find((name) => Object.getPrototypeOf(value) === saveClasses[name].prototype) ?? "Object";
+				data = {};
+				for (const [key, item] of Object.entries(value)) {
+					// Omit the route matrix until travel times are used again.
+					if (type === "Route" && key === "travelTimeTable") continue;
+					data[key] = encode(item);
+				}
+			}
+			nodes[id] = { type, data };
+			return { ref: id };
+		}
+		return { root: encode(root), nodes };
+	}
+
+	function decodeSaveGraph(graph) {
+		if (!graph || !Array.isArray(graph.nodes) || graph.nodes.length > 200000) throw new Error("Invalid save data.");
+		const objects = graph.nodes.map((node) => {
+			if (!node || typeof node.type !== "string" || !node.data || typeof node.data !== "object") throw new Error("Invalid save object.");
+			if (node.type === "Array" || node.type === "Set" || node.type === "Map") {
+				if (!Array.isArray(node.data)) throw new Error("Invalid save collection.");
+				return node.type === "Array" ? [] : node.type === "Set" ? new Set() : new Map();
+			}
+			if (Array.isArray(node.data)) throw new Error("Invalid save object.");
+			if (node.type === "Object") return {};
+			if (Object.hasOwn ? Object.hasOwn(saveClasses, node.type) : Object.prototype.hasOwnProperty.call(saveClasses, node.type)) {
+				return Object.create(saveClasses[node.type].prototype);
+			}
+			throw new Error("Unknown save object type.");
+		});
+		function decode(value) {
+			if (value === null || typeof value === "string" || typeof value === "boolean" || typeof value === "number") return value;
+			if (!value || typeof value !== "object" || Object.keys(value).length !== 1
+				|| !Number.isInteger(value.ref) || value.ref < 0 || value.ref >= objects.length) {
+				throw new Error("Invalid save reference.");
+			}
+			return objects[value.ref];
+		}
+		graph.nodes.forEach((node, index) => {
+			const object = objects[index];
+			if (node.type === "Array") node.data.forEach((value) => object.push(decode(value)));
+			else if (node.type === "Set") node.data.forEach((value) => object.add(decode(value)));
+			else if (node.type === "Map") node.data.forEach((entry) => {
+				if (!Array.isArray(entry) || entry.length !== 2) throw new Error("Invalid save map.");
+				object.set(decode(entry[0]), decode(entry[1]));
+			});
+			else {
+				for (const [key, value] of Object.entries(node.data)) {
+					if (key === "__proto__" || key === "constructor" || key === "prototype") throw new Error("Invalid save property.");
+					object[key] = decode(value);
+				}
+			}
+		});
+		const state = decode(graph.root);
+		if (!state || !Array.isArray(state.missionaries) || !state.missionaries.every((item) => item instanceof Missionary)
+			|| !Array.isArray(state.zones) || !state.zones.every((item) => item instanceof Zone)
+			|| !Array.isArray(state.routes) || !state.routes.every((item) => item instanceof Route && Array.isArray(item.stops))
+			|| !Array.isArray(state.apartments) || !state.apartments.every((item) => item instanceof Apartment)
+			|| !["unindexedAreas", "ignoredUnindexedAreas", "ignoredTransferTypeMissionaries", "ignoredMissingApartmentMissionaries",
+				"ignoredRenamedLocations", "sharedAfternoonFirstStopHouseBefore"].every((key) => state[key] instanceof Set)
+			|| !["renamedAreaHistory", "departingSelection", "tripPlans", "callNotes"].every((key) => state[key] instanceof Map)
+			|| !["hasBeforeBoard", "hasAfterBoard", "transferTypesReady", "departingSelectionConfirmed", "hasUnsavedDefaultChanges"]
+				.every((key) => typeof state[key] === "boolean")
+			|| !Array.isArray(state.uploads) || state.uploads.length !== 2
+			|| !state.uploads.every((item) => item && typeof item.name === "string" && typeof item.status === "string" && typeof item.error === "boolean")
+			|| (state.activeTripRoute !== null && !state.routes.includes(state.activeTripRoute))) throw new Error("Incomplete save data.");
+		for (const route of state.routes) {
+			// Old saves may contain a matrix; otherwise restore an empty one for route editing.
+			if (!Array.isArray(route.travelTimeTable)) {
+				route.travelTimeTable = route.stops.map(() => route.stops.map(() => null));
+			}
+		}
+		return state;
+	}
+
+	function captureProgressState() {
+		return {
+			missionaries: [...missionaries], zones: [...zones], routes: [...routes], apartments: [...apartments],
+			unindexedAreas, ignoredUnindexedAreas, ignoredTransferTypeMissionaries,
+			ignoredMissingApartmentMissionaries, ignoredRenamedLocations, renamedAreaHistory,
+			hasBeforeBoard, hasAfterBoard, transferTypesReady, departingSelectionConfirmed, departingSelection,
+			tripPlans: new Map(routes.filter((route) => tripPlansByRoute.has(route)).map((route) => [route, tripPlansByRoute.get(route)])),
+			callNotes: new Map(missionaries.filter((missionary) => callNoteOverrides.has(missionary))
+				.map((missionary) => [missionary, callNoteOverrides.get(missionary)])),
+			sharedAfternoonFirstStopHouseBefore, activeTripRoute, hasUnsavedDefaultChanges,
+			uploads: ["before", "after"].map((period) => ({
+				name: requireElement(`${period}-board-name`).textContent,
+				status: requireElement(`${period}-board-status`).textContent,
+				error: requireElement(`${period}-board-status`).classList.contains("error"),
+			})),
+		};
+	}
+
+	function captureProgress() {
+		return encodeSaveGraph(captureProgressState());
+	}
+
+	function resetTripProgress() {
+		restoreProgress({
+			missionaries: [], zones: [], routes: [...routes], apartments: [...apartments],
+			unindexedAreas: new Set(), ignoredUnindexedAreas: new Set(),
+			ignoredTransferTypeMissionaries: new Set(), ignoredMissingApartmentMissionaries: new Set(),
+			ignoredRenamedLocations: new Set(), renamedAreaHistory: new Map(),
+			hasBeforeBoard: false, hasAfterBoard: false, transferTypesReady: false,
+			departingSelectionConfirmed: false, departingSelection: new Map(),
+			tripPlans: new Map(), callNotes: new Map(), sharedAfternoonFirstStopHouseBefore: new Set(),
+			activeTripRoute: null, hasUnsavedDefaultChanges: false,
+			uploads: ["before", "after"].map(() => ({ name: "", status: "", error: false })),
+		});
+	}
+
+	function restoreProgress(state) {
+		missionaries.splice(0, missionaries.length, ...state.missionaries);
+		zones.splice(0, zones.length, ...state.zones);
+		routes.splice(0, routes.length, ...state.routes);
+		apartments.splice(0, apartments.length, ...state.apartments);
+		unindexedAreas = state.unindexedAreas;
+		ignoredUnindexedAreas = state.ignoredUnindexedAreas;
+		ignoredTransferTypeMissionaries = state.ignoredTransferTypeMissionaries;
+		ignoredMissingApartmentMissionaries = state.ignoredMissingApartmentMissionaries;
+		ignoredRenamedLocations = state.ignoredRenamedLocations;
+		renamedAreaHistory = state.renamedAreaHistory;
+		hasBeforeBoard = state.hasBeforeBoard;
+		hasAfterBoard = state.hasAfterBoard;
+		transferTypesReady = state.transferTypesReady;
+		departingSelectionConfirmed = state.departingSelectionConfirmed;
+		departingSelection = state.departingSelection;
+		tripPlansByRoute = new WeakMap(state.tripPlans);
+		callNoteOverrides = new WeakMap(state.callNotes);
+		sharedAfternoonFirstStopHouseBefore = state.sharedAfternoonFirstStopHouseBefore;
+		activeTripRoute = state.activeTripRoute;
+		selectedRenamedLocation = null;
+		draggedRenamedLocation = null;
+		for (const [index, period] of ["before", "after"].entries()) {
+			requireElement(`${period}-board-name`).textContent = state.uploads[index].name;
+			setStatus(requireElement(`${period}-board-status`), state.uploads[index].status, state.uploads[index].error);
+			requireElement(`${period}-board-file`).value = "";
+		}
+		setDefaultChangesDirty(state.hasUnsavedDefaultChanges);
+		renderRouteLists();
+		renderImportedData();
+	}
+
+	function showSaveStatus(message, isError = false) {
+		saveStatus.textContent = message;
+		saveStatus.classList.toggle("error", isError);
+	}
+
+	function writeSaves(nextSaves, nextCurrentId) {
+		localStorage.setItem(SAVES_STORAGE_KEY, JSON.stringify({ version: 1, currentSaveId: nextCurrentId, saves: nextSaves }));
+		saves = nextSaves;
+		currentSaveId = nextCurrentId;
+	}
+
+	function saveCurrentProgress() {
+		if (!saveManagerReady || !currentSaveId) return false;
+		try {
+			const current = saves.find((save) => save.id === currentSaveId);
+			if (!current) throw new Error("The current save is missing.");
+			const state = captureProgress();
+			writeSaves(saves.map((save) => save.id === currentSaveId ? { ...save, state } : save), currentSaveId);
+			showSaveStatus("Changes saved.");
+			return true;
+		} catch (error) {
+			showSaveStatus(`Could not save progress: ${error.message}`, true);
+			return false;
+		}
+	}
+
+	function validateSaveFile(data) {
+		if (!data || data.version !== 1 || !Array.isArray(data.saves)
+			|| (data.currentSaveId !== null && typeof data.currentSaveId !== "string")) throw new Error("This is not a supported save file.");
+		const ids = new Set();
+		for (const save of data.saves) {
+			if (!save || typeof save.id !== "string" || !save.id || ids.has(save.id)
+				|| typeof save.name !== "string" || !save.name.trim()) throw new Error("Invalid save list.");
+			ids.add(save.id);
+			decodeSaveGraph(save.state);
+		}
+		if (data.currentSaveId !== null && !ids.has(data.currentSaveId)) throw new Error("The current save is missing from the list.");
+		return data;
+	}
+
+	function renderSaveList() {
+		saveList.replaceChildren();
+		const ordered = [...saves].sort((a, b) => Number(b.id === currentSaveId) - Number(a.id === currentSaveId));
+		if (!ordered.length) {
+			const empty = document.createElement("li");
+			empty.className = "save-row";
+			empty.textContent = "No saves yet.";
+			saveList.append(empty);
+		}
+		for (const save of ordered) {
+			const row = document.createElement("li");
+			row.className = "save-row";
+			const name = document.createElement("strong");
+			name.textContent = `${save.name}${save.id === currentSaveId ? " (current)" : ""}`;
+			const actions = document.createElement("div");
+			actions.className = "save-row-actions";
+			const action = document.createElement("button");
+			action.className = save.id === currentSaveId ? "primary" : "secondary";
+			action.type = "button";
+			action.textContent = save.id === currentSaveId ? "Save changes" : "Load";
+			action.addEventListener("click", () => {
+				if (save.id === currentSaveId) {
+					saveCurrentProgress();
+					return;
+				}
+				if (!window.confirm(`Load "${save.name}"? Current unsaved progress will be replaced.`)) return;
+				try {
+					const state = decodeSaveGraph(save.state);
+					const previous = captureProgress();
+					try {
+						restoreProgress(state);
+						writeSaves(saves, save.id);
+					} catch (error) {
+						restoreProgress(decodeSaveGraph(previous));
+						throw error;
+					}
+					renderSaveList();
+					showSaveStatus(`Loaded ${save.name}.`);
+				} catch (error) {
+					showSaveStatus(`Could not load save: ${error.message}`, true);
+				}
+			});
+			const remove = document.createElement("button");
+			remove.className = "secondary";
+			remove.type = "button";
+			remove.textContent = "Delete";
+			remove.setAttribute("aria-label", `Delete ${save.name}`);
+			const rename = document.createElement("button");
+			rename.className = "secondary";
+			rename.type = "button";
+			rename.textContent = "Rename";
+			rename.setAttribute("aria-label", `Rename ${save.name}`);
+			rename.addEventListener("click", () => {
+				const name = window.prompt("Rename this save:", save.name);
+				if (name === null) return;
+				if (!name.trim()) {
+					showSaveStatus("Enter a name for the save.", true);
+					return;
+				}
+				try {
+					writeSaves(saves.map((item) => item.id === save.id ? { ...item, name: name.trim() } : item), currentSaveId);
+					renderSaveList();
+					showSaveStatus("Save renamed.");
+				} catch (error) {
+					showSaveStatus(`Could not rename save: ${error.message}`, true);
+				}
+			});
+			remove.addEventListener("click", () => {
+				if (!window.confirm(`Delete "${save.name}"?`)) return;
+				try {
+					const wasCurrent = save.id === currentSaveId;
+					writeSaves(saves.filter((item) => item.id !== save.id), wasCurrent ? null : currentSaveId);
+					renderSaveList();
+					showSaveStatus(wasCurrent ? "Save deleted. Create or load a save to keep progress." : "Save deleted.");
+				} catch (error) {
+					showSaveStatus(`Could not delete save: ${error.message}`, true);
+				}
+			});
+			actions.append(action, rename, remove);
+			row.append(name, actions);
+			saveList.append(row);
+		}
+	}
+
+	function initializeSaveManager() {
+		try {
+			const stored = localStorage.getItem(SAVES_STORAGE_KEY);
+			if (stored) {
+				const data = validateSaveFile(JSON.parse(stored));
+				saves = data.saves;
+			}
+			saveManagerReady = true;
+			renderSaveList();
+		} catch (error) {
+			showSaveStatus(`Could not load browser saves: ${error.message}. Load a backup file to recover.`, true);
+		}
+	}
+
+	requireElement("new-save").addEventListener("click", async () => {
+		await defaultsInitialization;
+		if (!saveManagerReady) return;
+		newSaveForm.reset();
+		newSaveStatus.textContent = "";
+		newSaveName.value = `Save ${saves.length + 1}`;
+		newSaveDialog.showModal();
+	});
+
+	requireElement("cancel-new-save").addEventListener("click", () => {
+		if (!creatingSave) newSaveDialog.close();
+	});
+	newSaveDialog.addEventListener("cancel", (event) => {
+		if (creatingSave) event.preventDefault();
+	});
+	newSaveForm.addEventListener("submit", async (event) => {
+		event.preventDefault();
+		if (creatingSave) return;
+		const name = newSaveName.value.trim();
+		if (!name) {
+			newSaveStatus.textContent = "Enter a name for the save.";
+			return;
+		}
+		const blank = newSaveForm.querySelector('input[name="new-save-start"]:checked').value === "blank";
+		if (blank && !window.confirm("Start a blank trip? Current unsaved progress will be replaced.")) return;
+		creatingSave = true;
+		newSaveStatus.textContent = "";
+		const buttons = newSaveForm.querySelectorAll("button");
+		buttons.forEach((button) => { button.disabled = true; });
+		let previous = null;
+		try {
+			if (blank) {
+				previous = captureProgressState();
+				await initializeDefaultData();
+				resetTripProgress();
+			}
+			const save = { id: `${Date.now()}-${Math.random().toString(36).slice(2)}`, name, state: captureProgress() };
+			writeSaves([...saves, save], save.id);
+			if (blank && editingRouteDraft) closeRouteEditor();
+			renderSaveList();
+			newSaveDialog.close();
+			showSaveStatus(blank ? "New blank save created." : "New save created from current progress.");
+		} catch (error) {
+			if (previous) restoreProgress(previous);
+			newSaveStatus.textContent = `Could not create save: ${error.message}`;
+			showSaveStatus(`Could not create save: ${error.message}`, true);
+		} finally {
+			creatingSave = false;
+			buttons.forEach((button) => { button.disabled = false; });
+		}
+	});
+
+	requireElement("clear-saves").addEventListener("click", async () => {
+		await defaultsInitialization;
+		if (!window.confirm("Delete all saves in this browser? This cannot be undone. Current progress and saved default routes will remain.")) return;
+		try {
+			writeSaves([], null);
+			saveManagerReady = true;
+			renderSaveList();
+			showSaveStatus("All saves deleted. Current progress is not saved.");
+		} catch (error) {
+			showSaveStatus(`Could not delete saves: ${error.message}`, true);
+		}
+	});
+
+	requireElement("export-saves").addEventListener("click", async () => {
+		await defaultsInitialization;
+		if (!saveManagerReady) return;
+		try {
+			// Re-encode inactive saves too, so older matrices are not exported.
+			const exportSaves = saves.map((save) => ({ ...save, state: encodeSaveGraph(decodeSaveGraph(save.state)) }));
+			const contents = JSON.stringify({ version: 1, currentSaveId, saves: exportSaves }, null, 2);
+			if (typeof window.showSaveFilePicker === "function") {
+				const handle = await window.showSaveFilePicker({
+					suggestedName: "transfer-van-saves.json",
+					types: [{ description: "JSON files", accept: { "application/json": [".json"] } }],
+				});
+				const writable = await handle.createWritable();
+				await writable.write(contents);
+				await writable.close();
+			} else {
+				const url = URL.createObjectURL(new Blob([contents], { type: "application/json" }));
+				const link = document.createElement("a");
+				link.href = url;
+				link.download = "transfer-van-saves.json";
+				link.click();
+				URL.revokeObjectURL(url);
+			}
+			showSaveStatus("Saves exported.");
+		} catch (error) {
+			if (error.name !== "AbortError") showSaveStatus(`Could not export saves: ${error.message}`, true);
+		}
+	});
+
+	saveFileInput.addEventListener("change", async () => {
+		const file = saveFileInput.files?.[0];
+		if (!file) return;
+		try {
+			await defaultsInitialization;
+			const data = validateSaveFile(JSON.parse(await file.text()));
+			if (!window.confirm("Replace all browser saves with the saves from this file?")) return;
+			writeSaves(data.saves, null);
+			saveManagerReady = true;
+			renderSaveList();
+			showSaveStatus("Save list loaded. Choose a save to load its progress.");
+		} catch (error) {
+			showSaveStatus(`Could not load save file: ${error.message}`, true);
+		} finally {
+			saveFileInput.value = "";
+		}
+	});
 
 	renderImportedData();
 	setupUploader("before");
