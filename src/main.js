@@ -38,6 +38,10 @@
 	const tripRouteEmpty = requireElement("trip-route-empty");
 	const tripTimeline = requireElement("trip-timeline");
 	const tripTimelineViewport = requireElement("trip-timeline-viewport");
+	const tripMissionaryPopup = requireElement("trip-missionary-popup");
+	const tripMissionaryPopupFields = new Map([...tripMissionaryPopup.querySelectorAll("[data-missionary-detail]")]
+		.map((field) => [field.dataset.missionaryDetail, field]));
+	let openTripMissionaryPopupOwner = null;
 	const printRouteSelect = requireElement("print-route-select");
 	const printRouteEmpty = requireElement("print-route-empty");
 	const printRouteName = requireElement("print-route-name");
@@ -67,7 +71,11 @@
 	const defaultsConfirmAccept = requireElement("defaults-confirm-accept");
 	const exportDefaultsButton = requireElement("export-defaults");
 	const openDefaultsButton = requireElement("open-defaults");
+	const defaultsJsonDialog = requireElement("json-open-dialog");
 	const defaultsJsonFile = requireElement("defaults-json-file");
+	const defaultsJsonDropzone = requireElement("defaults-json-dropzone");
+	const defaultsJsonFilename = requireElement("defaults-json-filename");
+	const defaultsJsonStatus = requireElement("defaults-json-status");
 	const missionaryOutput = requireElement("missionary-output");
 	const zoneOutput = requireElement("zone-output");
 	const renamedAreasButton = requireElement("renamed-areas-button");
@@ -626,6 +634,17 @@
 	}
 
 	async function openDefaultsJson(file) {
+		defaultsJsonFilename.textContent = file.name;
+		defaultsJsonStatus.textContent = "";
+		defaultsJsonStatus.classList.remove("error");
+		if (!file.name.toLowerCase().endsWith(".json")) {
+			defaultsJsonStatus.textContent = "Please choose a .json file.";
+			defaultsJsonStatus.classList.add("error");
+			defaultsJsonFile.value = "";
+			return;
+		}
+
+		defaultsJsonStatus.textContent = "Reading JSON file...";
 		try {
 			const data = JSON.parse(await file.text());
 			const restored = deserializeDefaultData(data);
@@ -633,9 +652,15 @@
 			routes.splice(0, routes.length, ...restored.restoredRoutes);
 			setDefaultChangesDirty(true, "JSON opened; save edits to keep these changes");
 			renderRouteLists();
+			defaultsSaveStatus.classList.remove("error");
+			defaultsJsonStatus.textContent = "JSON file opened.";
+			defaultsJsonDialog.close();
 		} catch (error) {
-			defaultsSaveStatus.textContent = error instanceof Error ? error.message : "Could not open this JSON file.";
+			const message = error instanceof Error ? error.message : "Could not open this JSON file.";
+			defaultsJsonStatus.textContent = message;
+			defaultsSaveStatus.textContent = message;
 			defaultsSaveStatus.classList.add("error");
+			defaultsJsonStatus.classList.add("error");
 		}
 		defaultsJsonFile.value = "";
 	}
@@ -1687,9 +1712,39 @@
 	});
 	defaultsConfirmDialog.addEventListener("cancel", (event) => event.preventDefault());
 	exportDefaultsButton.addEventListener("click", () => { void exportDefaultsJson(); });
-	openDefaultsButton.addEventListener("click", () => defaultsJsonFile.click());
+	openDefaultsButton.addEventListener("click", () => {
+		defaultsJsonFilename.textContent = "";
+		defaultsJsonStatus.textContent = "";
+		defaultsJsonStatus.classList.remove("error");
+		defaultsJsonDialog.showModal();
+	});
+	defaultsJsonDialog.addEventListener("close", () => {
+		defaultsJsonFile.value = "";
+	});
 	defaultsJsonFile.addEventListener("change", () => {
 		const file = defaultsJsonFile.files?.[0];
+		if (file) void openDefaultsJson(file);
+	});
+	let defaultsJsonDragDepth = 0;
+	defaultsJsonDropzone.addEventListener("dragenter", (event) => {
+		event.preventDefault();
+		defaultsJsonDragDepth += 1;
+		defaultsJsonDropzone.classList.add("drag-over");
+	});
+	defaultsJsonDropzone.addEventListener("dragover", (event) => {
+		event.preventDefault();
+		if (event.dataTransfer) event.dataTransfer.dropEffect = "copy";
+	});
+	defaultsJsonDropzone.addEventListener("dragleave", (event) => {
+		event.preventDefault();
+		defaultsJsonDragDepth = Math.max(0, defaultsJsonDragDepth - 1);
+		if (defaultsJsonDragDepth === 0) defaultsJsonDropzone.classList.remove("drag-over");
+	});
+	defaultsJsonDropzone.addEventListener("drop", (event) => {
+		event.preventDefault();
+		defaultsJsonDragDepth = 0;
+		defaultsJsonDropzone.classList.remove("drag-over");
+		const file = event.dataTransfer?.files[0];
 		if (file) void openDefaultsJson(file);
 	});
 
@@ -3669,6 +3724,66 @@
 		return teachingAreas;
 	}
 
+	function closeTripMissionaryPopup() {
+		openTripMissionaryPopupOwner?.setAttribute("aria-expanded", "false");
+		openTripMissionaryPopupOwner = null;
+		tripMissionaryPopup.hidden = true;
+	}
+
+	function toggleTripMissionaryPopup(missionary, token) {
+		if (openTripMissionaryPopupOwner === token) {
+			closeTripMissionaryPopup();
+			return;
+		}
+
+		const details = {
+			"area-before": missionary.areaBefore
+				? displayName(missionary.areaBefore.nameBefore, missionary.areaBefore.nameAfter, "before") || "Not named"
+				: "Not assigned",
+			"position-before": missionary.positionBefore || "Not set",
+			"area-after": missionary.areaAfter
+				? displayName(missionary.areaAfter.nameBefore, missionary.areaAfter.nameAfter, "after") || "Not named"
+				: "Not assigned",
+			"position-after": missionary.positionAfter || "Not set",
+			apartment: missionary.currentLoc?.name || "Not assigned",
+		};
+		for (const [key, value] of Object.entries(details)) {
+			const field = tripMissionaryPopupFields.get(key);
+			if (field) field.textContent = value;
+		}
+
+		openTripMissionaryPopupOwner?.setAttribute("aria-expanded", "false");
+		openTripMissionaryPopupOwner = token;
+		token.setAttribute("aria-expanded", "true");
+		tripMissionaryPopup.hidden = false;
+		tripMissionaryPopup.style.visibility = "hidden";
+		const tokenBounds = token.getBoundingClientRect();
+		const popupBounds = tripMissionaryPopup.getBoundingClientRect();
+		const margin = 8;
+		const maxLeft = Math.max(margin, window.innerWidth - popupBounds.width - margin);
+		const left = Math.min(Math.max(tokenBounds.left, margin), maxLeft);
+		let top = tokenBounds.bottom + 6;
+		if (top + popupBounds.height > window.innerHeight - margin) {
+			top = tokenBounds.top - popupBounds.height - 6;
+		}
+		const maxTop = Math.max(margin, window.innerHeight - popupBounds.height - margin);
+		tripMissionaryPopup.style.left = `${left}px`;
+		tripMissionaryPopup.style.top = `${Math.min(Math.max(top, margin), maxTop)}px`;
+		tripMissionaryPopup.style.visibility = "";
+	}
+
+	document.addEventListener("click", (event) => {
+		if (!openTripMissionaryPopupOwner || !(event.target instanceof Node)) return;
+		if (tripMissionaryPopup.contains(event.target) || openTripMissionaryPopupOwner.contains(event.target)) return;
+		closeTripMissionaryPopup();
+	});
+	document.addEventListener("keydown", (event) => {
+		if (event.key === "Escape") closeTripMissionaryPopup();
+	});
+	window.addEventListener("scroll", closeTripMissionaryPopup, true);
+	window.addEventListener("resize", closeTripMissionaryPopup);
+	tripTimelineViewport.addEventListener("scroll", closeTripMissionaryPopup, { passive: true });
+
 	function createTripMissionary(missionary, stop, source, draggable = false, manuallyMoved = false) {
 		if (isTripMissionaryExcluded(missionary)) return null;
 		const token = document.createElement("button");
@@ -3677,17 +3792,27 @@
 		token.type = "button";
 		token.textContent = missionary.getRealName() || "Unidentified missionary";
 		token.draggable = draggable;
-		token.disabled = !draggable;
+		token.setAttribute("aria-controls", tripMissionaryPopup.id);
+		token.setAttribute("aria-expanded", "false");
+		let wasDragged = false;
+		token.addEventListener("click", () => {
+			if (!wasDragged) toggleTripMissionaryPopup(missionary, token);
+		});
 		if (draggable) {
-			token.title = "Drag to the paired box";
+			token.title = "Drag to the paired box, or click to view assignment details";
 			token.addEventListener("dragstart", (event) => {
+				wasDragged = true;
+				closeTripMissionaryPopup();
 				tripDrag = { missionary, stop, source };
 				if (event.dataTransfer) {
 					event.dataTransfer.effectAllowed = "move";
 					event.dataTransfer.setData("text/plain", "missionary");
 				}
 			});
-			token.addEventListener("dragend", () => { tripDrag = null; });
+			token.addEventListener("dragend", () => {
+				tripDrag = null;
+				setTimeout(() => { wasDragged = false; }, 0);
+			});
 		}
 		return token;
 	}
@@ -4003,6 +4128,7 @@
 	}
 
 	function renderTripTimeline(route = null) {
+		closeTripMissionaryPopup();
 		const selectedRoute = routes.includes(route)
 			? route
 			: (routes.includes(activeTripRoute) ? activeTripRoute : routes[0] ?? null);

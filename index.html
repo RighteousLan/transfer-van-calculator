@@ -34,7 +34,7 @@
 			<p class="eyebrow">Trip planning</p>
 			<!--<h1>Make every transfer count.</h1>
 			<p class="intro">Plan your van transfers and bring the trip details together in one place.</p>-->
-			<div class="actions">
+			<div class="actions" hidden>
 				<button class="secondary" id="define-default-routes" type="button">Define Default Routes</button>
 				<button class="primary" id="new-trip" type="button">
 					New Trip
@@ -269,9 +269,8 @@
 					</div>
 				</section>
 				<footer class="defaults-file-footer">
-					<button class="secondary" id="export-defaults" type="button">Export JSON</button>
-					<button class="secondary" id="open-defaults" type="button">Open JSON</button>
-					<input id="defaults-json-file" type="file" accept=".json,application/json" hidden>
+					<button class="secondary" id="export-defaults" type="button" title="Export JSON">Save to file</button>
+					<button class="secondary" id="open-defaults" type="button" title="Open JSON">Open File</button>
 				</footer>
 			</div>
 			<section class="route-editor-view" id="route-editor-view" hidden aria-label="Edit route">
@@ -340,6 +339,15 @@
 			</div>
 		</section>
 	</main>
+	<aside class="trip-missionary-popup" id="trip-missionary-popup" role="note" aria-label="Missionary assignment details" hidden>
+		<dl>
+			<div><dt>Area before</dt><dd data-missionary-detail="area-before"></dd></div>
+			<div><dt>Position before</dt><dd data-missionary-detail="position-before"></dd></div>
+			<div><dt>Area after</dt><dd data-missionary-detail="area-after"></dd></div>
+			<div><dt>Position after</dt><dd data-missionary-detail="position-after"></dd></div>
+			<div><dt>Current apartment</dt><dd data-missionary-detail="apartment"></dd></div>
+		</dl>
+	</aside>
 	<dialog class="workflow-dialog" id="single-apartment-dialog" aria-labelledby="single-apartment-title">
 		<form id="single-apartment-form">
 			<header class="dialog-header">
@@ -415,6 +423,27 @@
 					<span class="duplicate-name-warning" id="batch-apartment-existing-conflict-count" aria-live="polite" hidden></span>
 				</div>
 				<button class="primary" id="save-batch-apartments" type="submit" hidden>Add apartments</button>
+			</footer>
+		</form>
+	</dialog>
+	<dialog class="workflow-dialog json-open-dialog" id="json-open-dialog" aria-labelledby="json-open-title">
+		<form method="dialog">
+			<header class="dialog-header">
+				<div>
+					<p class="eyebrow">Apartment data</p>
+					<h2 id="json-open-title">Open JSON file</h2>
+				</div>
+			</header>
+			<div class="batch-dropzone" id="defaults-json-dropzone">
+				<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 16V4m-5 5 5-5 5 5M4 16v4h16v-4" /></svg>
+				<p>Drop a .json file here, or choose one</p>
+				<label class="upload-button" for="defaults-json-file">Choose file</label>
+				<input class="file-input" id="defaults-json-file" type="file" accept=".json,application/json">
+				<span class="file-name" id="defaults-json-filename" aria-live="polite"></span>
+				<span class="upload-status" id="defaults-json-status" aria-live="polite"></span>
+			</div>
+			<footer class="dialog-actions">
+				<button class="secondary" type="submit">Cancel</button>
 			</footer>
 		</form>
 	</dialog>

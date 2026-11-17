@@ -833,12 +833,20 @@ button svg, .upload-button svg { width: 17px; height: 17px; }
 }
 
 .batch-add-button {
+	flex: 1;
 	min-height: 44px;
 	padding: 0 12px;
-	font-size: 11px;
+	border-color: var(--green);
+	color: #fff;
+	background: var(--green);
+	font-size: 12px;
 	letter-spacing: 0.5px;
 	text-transform: uppercase;
 }
+
+.batch-add-button:not(:disabled):hover { background: var(--green-dark); }
+
+.json-open-dialog { width: min(calc(100vw - 32px), 520px); }
 
 .workflow-dialog {
 	width: min(calc(100vw - 32px), 520px);
@@ -2087,7 +2095,7 @@ button.map-pin:not(:disabled):hover {
 
 .trip-missionary[draggable="true"] { cursor: grab; }
 .trip-missionary[draggable="true"]:active { cursor: grabbing; }
-.trip-missionary:disabled { opacity: 1; cursor: not-allowed; }
+.trip-missionary:not([draggable="true"]) { cursor: not-allowed; }
 .trip-missionary[draggable="true"]:hover { border-color: #84a493; background: var(--soft-green); }
 
 .trip-missionary.is-moved {
@@ -2107,9 +2115,47 @@ button.map-pin:not(:disabled):hover {
 	border-color: #b74135;
 }
 
-.trip-missionary.is-missing:disabled {
+.trip-missionary.is-missing {
 	opacity: 0.5;
-	cursor: default;
+}
+
+.trip-missionary-popup {
+	position: fixed;
+	z-index: 1200;
+	width: min(290px, calc(100vw - 16px));
+	max-height: min(65vh, 320px);
+	overflow: auto;
+	padding: 11px 13px;
+	border: 1px solid #9aaa9e;
+	border-radius: 5px;
+	background: var(--surface);
+	box-shadow: 0 5px 18px rgb(20 35 29 / 22%);
+}
+
+.trip-missionary-popup dl {
+	display: grid;
+	gap: 8px;
+	margin: 0;
+}
+
+.trip-missionary-popup dl > div {
+	display: grid;
+	grid-template-columns: minmax(94px, 0.8fr) minmax(0, 1.2fr);
+	gap: 10px;
+}
+
+.trip-missionary-popup dt {
+	color: var(--muted);
+	font-size: 11px;
+	font-weight: 650;
+}
+
+.trip-missionary-popup dd {
+	min-width: 0;
+	margin: 0;
+	font-size: 12px;
+	font-weight: 600;
+	overflow-wrap: anywhere;
 }
 
 .trip-box.is-drop-target {
